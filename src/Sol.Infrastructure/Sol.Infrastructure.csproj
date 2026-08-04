@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Dapper.AOT emits C# interceptors, which only apply within the compilation that
+      contains the call site — they do NOT flow across ProjectReference. Every Dapper
+      call in the solution must therefore live in THIS project, and this is the only
+      project that enables the interceptor namespace.
+    -->
+    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);Dapper.AOT</InterceptorsPreviewNamespaces>
+    <!-- Dapper.AOT still emits the legacy [InterceptsLocation(string,int,int)] form. -->
+    <NoWarn>$(NoWarn);CS9270</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Sol.Application/Sol.Application.csproj" />
+  </ItemGroup>
+
+  <!--
+    The AI clients and the key protector are internal on purpose — they are implementation
+    details behind Application ports. Tests assert their behaviour directly rather than through
+    a widened public surface.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sol.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Dapper.AOT" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Npgsql.DependencyInjection" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="RabbitMQ.Client" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <!-- Migrations are embedded so a single AOT binary carries its own schema. -->
+  <ItemGroup>
+    <EmbeddedResource Include="../../db/migrations/*.sql" LogicalName="Sol.Migrations.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

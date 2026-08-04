@@ -1,0 +1,617 @@
+using Microsoft.AspNetCore.Http.HttpResults;
+using Sol.Api.Middleware;
+using Sol.Application.Abstractions.Ai;
+using Sol.Application.Abstractions.Persistence;
+using Sol.Application.Abstractions.Security;
+using Sol.Application.Contracts.Ai;
+using Sol.Domain.Ai;
+using Sol.Domain.Identity;
+
+namespace Sol.Api.Endpoints;
+
+/// <summary>
+/// Image generation and asset delivery.
+/// </summary>
+/// <remarks>
+/// The browser never talks to a vendor: it posts a provider id and a prompt here, the server
+/// decrypts the key, calls upstream, stores the result, and returns an asset URL. That keeps
+/// keys off the client, sidesteps CORS entirely, and means a provider that requires an
+/// allow-listed egress IP still works.
+/// </remarks>
+public static class AiGenerationEndpoints
+{
+    /// <summary>Ceiling on images per request, matching what the canvas UI offers.</summary>
+    private const int MaxImageCount = 4;
+
+    /// <summary>
+    /// Cap on how many reference images one request may carry. Each is read fully into memory
+    /// and re-sent upstream, so an unbounded list is a memory amplification vector.
+    /// </summary>
+    private const int MaxReferenceImages = 8;
+
+    /// <summary>
+    /// Cap on an uploaded file. Generous enough for a camera original, small enough that a
+    /// handful of concurrent uploads cannot exhaust memory — the file is buffered before it is
+    /// written, so this is a memory bound, not just a disk one.
+    /// </summary>
+    private const long MaxUploadBytes = 20 * 1024 * 1024;
+
+    /// <summary>
+    /// Image types accepted for upload.
+    /// </summary>
+    /// <remarks>
+    /// SVG is deliberately excluded. It is XML that can carry script, and a browser navigating
+    /// directly to a stored SVG would execute it as same-origin — turning the asset route into
+    /// stored XSS. The raster formats here cannot do that.
+    /// </remarks>
+    private static readonly string[] AllowedUploadTypes =
+        ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+    /// <summary>How many assets the library shows by default.</summary>
+    private const int DefaultAssetPageSize = 60;
+
+    /// <summary>
+    /// Hard ceiling on one listing. The library is a picker, not an archive browser, and a
+    /// device with thousands of generations should not be able to ask for all of them at once.
+    /// </summary>
+    private const int MaxAssetPageSize = 200;
+
+    public static IEndpointRouteBuilder MapAiGenerationEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapPost("/api/v1/ai/images", GenerateImagesAsync)
+            .WithTags("ai")
+            .WithName("GenerateImages");
+
+        app.MapPost("/api/v1/ai/text", GenerateTextAsync)
+            .WithTags("ai")
+            .WithName("GenerateText");
+
+        app.MapGet("/api/v1/canvas/assets/{id}", GetAssetAsync)
+            .WithTags("canvas")
+            .WithName("GetCanvasAsset");
+
+        app.MapGet("/api/v1/canvas/assets", ListAssetsAsync)
+            .WithTags("canvas")
+            .WithName("ListCanvasAssets");
+
+        app.MapDelete("/api/v1/canvas/assets/{id}", DeleteAssetAsync)
+            .WithTags("canvas")
+            .WithName("DeleteCanvasAsset");
+
+        // No antiforgery token: the only credential this endpoint accepts is the device cookie,
+        // which is SameSite=Lax and therefore not sent on a cross-site POST at all.
+        app.MapPost("/api/v1/canvas/assets", UploadAssetAsync)
+            .WithTags("canvas")
+            .WithName("UploadCanvasAsset")
+            .DisableAntiforgery();
+
+        return app;
+    }
+
+    /// <summary>
+    /// Stores a user-supplied image and returns the URL the canvas should reference.
+    /// </summary>
+    /// <remarks>
+    /// Without this, an uploaded image only ever existed as an object URL inside one tab: it
+    /// broke on reload, and the generation endpoint silently ignored it as a reference because
+    /// only <c>/api/v1/canvas/assets/</c> URLs resolve server-side.
+    /// </remarks>
+    private static async Task<Results<Ok<GeneratedAsset>, BadRequest<ErrorResponse>,
+        UnauthorizedHttpResult>> UploadAssetAsync(
+        IFormFile file,
+        HttpContext http,
+        IAssetStore assetStore,
+        ICanvasAssetRepository assets,
+        CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        if (file.Length == 0)
+        {
+            return Invalid("the uploaded file is empty");
+        }
+
+        if (file.Length > MaxUploadBytes)
+        {
+            return Invalid($"the file exceeds the {MaxUploadBytes / (1024 * 1024)} MB limit");
+        }
+
+        var mediaType = file.ContentType?.Split(';')[0].Trim().ToLowerInvariant() ?? string.Empty;
+
+        if (!AllowedUploadTypes.Contains(mediaType))
+        {
+            return Invalid($"unsupported image type '{mediaType}'");
+        }
+
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, ct);
+        var bytes = buffer.ToArray();
+
+        // Content-Type is client-supplied and trivially forged, so the declared type is checked
+        // against the actual file signature. Otherwise anything could be stored under an image
+        // media type and served back with it.
+        if (!SignatureMatches(bytes, mediaType))
+        {
+            return Invalid("the file contents do not match the declared image type");
+        }
+
+        var stored = await assetStore.SaveAsync(bytes, mediaType, ExtensionFor(mediaType), ct);
+        var assetId = Guid.CreateVersion7();
+
+        await assets.InsertAsync(
+            new CanvasAsset(
+                assetId,
+                deviceId,
+                "image",
+                stored.MediaType,
+                stored.StoragePath,
+                stored.ByteSize,
+                null,
+                DateTimeOffset.UtcNow),
+            ct);
+
+        return TypedResults.Ok(new GeneratedAsset(
+            $"/api/v1/canvas/assets/{assetId}", stored.MediaType, assetId.ToString()));
+    }
+
+    /// <summary>Checks the leading magic bytes against the declared media type.</summary>
+    private static bool SignatureMatches(byte[] bytes, string mediaType) => mediaType switch
+    {
+        "image/png" => bytes.Length >= 8
+            && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47,
+
+        "image/jpeg" => bytes.Length >= 3
+            && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF,
+
+        "image/gif" => bytes.Length >= 6
+            && bytes[0] == (byte)'G' && bytes[1] == (byte)'I' && bytes[2] == (byte)'F',
+
+        // RIFF container with a WEBP fourcc at offset 8.
+        "image/webp" => bytes.Length >= 12
+            && bytes[0] == (byte)'R' && bytes[1] == (byte)'I'
+            && bytes[2] == (byte)'F' && bytes[3] == (byte)'F'
+            && bytes[8] == (byte)'W' && bytes[9] == (byte)'E'
+            && bytes[10] == (byte)'B' && bytes[11] == (byte)'P',
+
+        _ => false,
+    };
+
+    private static async Task<Results<Ok<GenerateImageResponse>, BadRequest<ErrorResponse>,
+        NotFound, UnauthorizedHttpResult>> GenerateImagesAsync(
+        GenerateImageRequest request,
+        HttpContext http,
+        IProviderRepository providers,
+        IApiKeyProtector protector,
+        IImageGenerationDispatcher dispatcher,
+        IAssetStore assetStore,
+        ICanvasAssetRepository assets,
+        CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        if (!ProviderId.TryParse(request.ProviderId, out var providerId))
+        {
+            return Invalid("malformed provider id");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Prompt) && (request.Images?.Length ?? 0) == 0)
+        {
+            return Invalid("a prompt or at least one reference image is required");
+        }
+
+        var provider = await providers.FindAsync(deviceId, providerId, ct);
+        if (provider is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!provider.Enabled)
+        {
+            return Invalid($"provider '{provider.Name}' is disabled");
+        }
+
+        var model = provider.Models.FirstOrDefault(
+            candidate => candidate.ModelKey == request.ModelKey);
+
+        if (model is null)
+        {
+            return Invalid($"model '{request.ModelKey}' is not configured on this provider");
+        }
+
+        if (model.Category != ModelCategory.Image)
+        {
+            return Invalid($"model '{request.ModelKey}' is not an image model");
+        }
+
+        string apiKey;
+        if (!TryUnprotectKey(provider, protector, out apiKey, out var keyError))
+        {
+            return Invalid(keyError);
+        }
+
+        // Reference images are named by asset URL; resolving them here keeps the client from
+        // having to upload the same bytes back to us.
+        var references = new List<ReferenceImage>();
+        if (request.Images is { Length: > 0 } imageUrls)
+        {
+            if (imageUrls.Length > MaxReferenceImages)
+            {
+                return Invalid($"at most {MaxReferenceImages} reference images are allowed");
+            }
+
+            foreach (var url in imageUrls)
+            {
+                var reference = await LoadReferenceAsync(url, deviceId, assets, assetStore, ct);
+                if (reference is not null)
+                {
+                    references.Add(reference);
+                }
+                // A reference that cannot be resolved is skipped rather than failing the run:
+                // it is usually a node whose image was never uploaded, and generating from the
+                // prompt alone is more useful than an error.
+            }
+        }
+
+        var protocol = provider.ResolveProtocol(model);
+        var count = Math.Clamp(request.Count ?? 1, 1, MaxImageCount);
+
+        var result = await dispatcher.GenerateAsync(
+            protocol,
+            new ImageGenerationRequest(
+                provider,
+                apiKey,
+                request.ModelKey,
+                request.Prompt,
+                references,
+                request.Size,
+                request.Quality,
+                request.OutputFormat,
+                request.ResponseFormat,
+                count,
+                request.Seed),
+            ct);
+
+        if (!result.Ok)
+        {
+            return Invalid(result.Error ?? "image generation failed");
+        }
+
+        var stored = new List<GeneratedAsset>(result.Images.Count);
+
+        foreach (var image in result.Images)
+        {
+            var saved = await assetStore.SaveAsync(
+                image.Bytes, image.MediaType, ExtensionFor(image.MediaType), ct);
+
+            var assetId = Guid.CreateVersion7();
+
+            await assets.InsertAsync(
+                new CanvasAsset(
+                    assetId,
+                    deviceId,
+                    "image",
+                    saved.MediaType,
+                    saved.StoragePath,
+                    saved.ByteSize,
+                    request.Prompt,
+                    DateTimeOffset.UtcNow),
+                ct);
+
+            stored.Add(new GeneratedAsset(
+                $"/api/v1/canvas/assets/{assetId}", saved.MediaType, assetId.ToString()));
+        }
+
+        return TypedResults.Ok(new GenerateImageResponse([.. stored]));
+    }
+
+    /// <summary>
+    /// Generates text — used by the canvas for writing and rewriting prompts.
+    /// </summary>
+    private static async Task<Results<Ok<GenerateTextResponse>, BadRequest<ErrorResponse>,
+        NotFound, UnauthorizedHttpResult>> GenerateTextAsync(
+        GenerateTextRequest request,
+        HttpContext http,
+        IProviderRepository providers,
+        IApiKeyProtector protector,
+        ITextGenerationDispatcher dispatcher,
+        IAssetStore assetStore,
+        ICanvasAssetRepository assets,
+        CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        if (!ProviderId.TryParse(request.ProviderId, out var providerId))
+        {
+            return Invalid("malformed provider id");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Prompt))
+        {
+            return Invalid("a prompt is required");
+        }
+
+        var provider = await providers.FindAsync(deviceId, providerId, ct);
+        if (provider is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!provider.Enabled)
+        {
+            return Invalid($"provider '{provider.Name}' is disabled");
+        }
+
+        var model = provider.Models.FirstOrDefault(
+            candidate => candidate.ModelKey == request.ModelKey);
+
+        if (model is null)
+        {
+            return Invalid($"model '{request.ModelKey}' is not configured on this provider");
+        }
+
+        if (model.Category != ModelCategory.Chat)
+        {
+            return Invalid($"model '{request.ModelKey}' is not a chat model");
+        }
+
+        if (!TryUnprotectKey(provider, protector, out var apiKey, out var keyError))
+        {
+            return Invalid(keyError);
+        }
+
+        var references = new List<ReferenceImage>();
+        if (request.Images is { Length: > 0 } urls)
+        {
+            if (urls.Length > MaxReferenceImages)
+            {
+                return Invalid($"at most {MaxReferenceImages} reference images are allowed");
+            }
+
+            foreach (var url in urls)
+            {
+                if (await LoadReferenceAsync(url, deviceId, assets, assetStore, ct) is { } image)
+                {
+                    references.Add(image);
+                }
+            }
+        }
+
+        var result = await dispatcher.GenerateAsync(
+            provider.ResolveProtocol(model),
+            new TextGenerationRequest(
+                provider,
+                apiKey,
+                request.ModelKey,
+                request.Prompt,
+                request.SystemPrompt,
+                references,
+                request.MaxOutputTokens ?? model.MaxOutputTokens,
+                request.Temperature),
+            ct);
+
+        return result.Ok && result.Text is not null
+            ? TypedResults.Ok(new GenerateTextResponse(result.Text))
+            : Invalid(result.Error ?? "text generation failed");
+    }
+
+    /// <summary>
+    /// Lists a device's stored media, for the asset library.
+    /// </summary>
+    private static async Task<Results<Ok<CanvasAssetListResponse>, UnauthorizedHttpResult>>
+        ListAssetsAsync(
+            HttpContext http,
+            ICanvasAssetRepository assets,
+            CancellationToken ct,
+            string? kind = null,
+            int? limit = null)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        // Anything outside the known kinds is treated as "no filter" rather than an error —
+        // the parameter comes from a query string and a typo should not fail the picker.
+        var filter = kind is "image" or "video" ? kind : null;
+        var take = Math.Clamp(limit ?? DefaultAssetPageSize, 1, MaxAssetPageSize);
+
+        var list = await assets.ListAsync(deviceId, filter, take, ct);
+
+        return TypedResults.Ok(new CanvasAssetListResponse(
+        [
+            .. list.Select(asset => new CanvasAssetSummary(
+                asset.AssetId.ToString(),
+                $"/api/v1/canvas/assets/{asset.AssetId}",
+                asset.Kind,
+                asset.MediaType,
+                asset.ByteSize,
+                asset.Prompt,
+                asset.CreatedAt.ToString("O"))),
+        ]));
+    }
+
+    /// <summary>
+    /// Deletes an asset and the file behind it.
+    /// </summary>
+    /// <remarks>
+    /// The row goes first: if the file removal then fails, the result is an orphaned file rather
+    /// than a row pointing at nothing. A canvas still referencing this asset will render a
+    /// broken image — acceptable, because the alternative is refusing to delete anything the
+    /// user might have used, which makes the library unmanageable.
+    /// </remarks>
+    private static async Task<Results<NoContent, NotFound, UnauthorizedHttpResult>>
+        DeleteAssetAsync(
+            string id,
+            HttpContext http,
+            ICanvasAssetRepository assets,
+            IAssetStore assetStore,
+            CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        if (!Guid.TryParse(id, out var assetId))
+        {
+            return TypedResults.NotFound();
+        }
+
+        var storagePath = await assets.DeleteAsync(deviceId, assetId, ct);
+        if (storagePath is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        assetStore.Delete(storagePath);
+
+        return TypedResults.NoContent();
+    }
+
+    /// <summary>Streams a stored asset back to its owner.</summary>
+    private static async Task<Results<FileStreamHttpResult, NotFound, UnauthorizedHttpResult>>
+        GetAssetAsync(
+            string id,
+            HttpContext http,
+            ICanvasAssetRepository assets,
+            IAssetStore assetStore,
+            CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        if (!Guid.TryParse(id, out var assetId))
+        {
+            return TypedResults.NotFound();
+        }
+
+        var asset = await assets.FindAsync(deviceId, assetId, ct);
+        if (asset is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var stream = assetStore.OpenRead(asset.StoragePath);
+        if (stream is null)
+        {
+            // The row outlived its file. A 404 is the honest answer.
+            return TypedResults.NotFound();
+        }
+
+        // Private, not public: an asset is readable only by the device that owns it, so a shared
+        // cache must never hold it. Immutable because content at an id never changes.
+        http.Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+
+        // Stops a browser from second-guessing the stored media type. Combined with the upload
+        // whitelist and signature check, it keeps a stored file from ever being interpreted as
+        // markup or script on this origin.
+        http.Response.Headers.XContentTypeOptions = "nosniff";
+
+        return TypedResults.Stream(stream, asset.MediaType, enableRangeProcessing: true);
+    }
+
+    /// <summary>
+    /// Resolves an asset URL back into bytes.
+    /// </summary>
+    /// <remarks>
+    /// Only our own asset paths are accepted. Fetching an arbitrary URL supplied by the client
+    /// would turn this endpoint into a server-side request forgery primitive, reachable by
+    /// anyone who can post to it.
+    /// </remarks>
+    private static async Task<ReferenceImage?> LoadReferenceAsync(
+        string url,
+        DeviceId deviceId,
+        ICanvasAssetRepository assets,
+        IAssetStore assetStore,
+        CancellationToken ct)
+    {
+        const string prefix = "/api/v1/canvas/assets/";
+
+        if (!url.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var idSegment = url[prefix.Length..].Split('?')[0];
+        if (!Guid.TryParse(idSegment, out var assetId))
+        {
+            return null;
+        }
+
+        var asset = await assets.FindAsync(deviceId, assetId, ct);
+        if (asset is null)
+        {
+            return null;
+        }
+
+        await using var stream = assetStore.OpenRead(asset.StoragePath);
+        if (stream is null)
+        {
+            return null;
+        }
+
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, ct);
+
+        return new ReferenceImage(buffer.ToArray(), asset.MediaType);
+    }
+
+    /// <summary>
+    /// Recovers a provider's API key.
+    /// </summary>
+    /// <remarks>
+    /// Decryption fails when the configured encryption key changed or the row was tampered with.
+    /// Neither is retryable, so the message says to re-enter the key rather than presenting it
+    /// as a transient error.
+    /// </remarks>
+    private static bool TryUnprotectKey(
+        Sol.Domain.Ai.AiProvider provider,
+        IApiKeyProtector protector,
+        out string apiKey,
+        out string error)
+    {
+        if (provider.ApiKey is null)
+        {
+            apiKey = string.Empty;
+            error = string.Empty;
+            return true;
+        }
+
+        try
+        {
+            apiKey = protector.Unprotect(provider.ApiKey);
+            error = string.Empty;
+            return true;
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            apiKey = string.Empty;
+            error = "The stored API key could not be decrypted. Re-enter it in settings.";
+            return false;
+        }
+    }
+
+    private static string ExtensionFor(string mediaType) => mediaType switch
+    {
+        "image/png" => ".png",
+        "image/jpeg" => ".jpg",
+        "image/webp" => ".webp",
+        "image/gif" => ".gif",
+        "video/mp4" => ".mp4",
+        _ => ".bin",
+    };
+
+    private static BadRequest<ErrorResponse> Invalid(string detail) =>
+        TypedResults.BadRequest(new ErrorResponse("invalid_request", [detail]));
+}

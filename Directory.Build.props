@@ -1,0 +1,29 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!--
+    Turns on the trim/AOT analysers in every class library, so a violation
+    (Expression.Compile, reflective scanning, …) surfaces as IL2xxx/IL3xxx at build
+    time in the layer that caused it, instead of as publish-time noise in Sol.Api.
+  -->
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!--
+    Dapper.AOT reports unsupported call sites (multi-mapping, QueryMultiple, untyped
+    parameters) as Info-level diagnostics and silently falls back to reflection Dapper,
+    which then throws only under AOT at runtime. Promote them to build errors.
+  -->
+  <PropertyGroup>
+    <WarningsAsErrors>$(WarningsAsErrors);DAP001;DAP013;DAP015;DAP016;DAP017</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

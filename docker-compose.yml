@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: sol-postgres
+    environment:
+      POSTGRES_USER: sol
+      POSTGRES_PASSWORD: sol_dev_password
+      POSTGRES_DB: sol
+    ports:
+      - "5432:5432"
+    # postgres:18+ expects a single mount at /var/lib/postgresql (data lands in a
+    # subdirectory) so that pg_upgrade --link works without mount-boundary issues.
+    volumes:
+      - sol-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sol -d sol"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Host ports are offset from the defaults: other long-running projects on this
+  # machine already bind 6379 / 5672 / 15672. Container-internal ports are unchanged.
+  redis:
+    image: redis:8-alpine
+    container_name: sol-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - sol-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: sol-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: sol
+      RABBITMQ_DEFAULT_PASS: sol_dev_password
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    volumes:
+      - sol-rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  sol-pgdata:
+  sol-redisdata:
+  sol-rabbitdata:

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <PublishAot>true</PublishAot>
+    <!-- Report trim/AOT warnings individually rather than as one rolled-up line. -->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <RootNamespace>Sol.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Sol.Infrastructure/Sol.Infrastructure.csproj" />
+    <ProjectReference Include="../Sol.Application/Sol.Application.csproj" />
+    <ProjectReference Include="../Sol.Domain/Sol.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" />
+    <PackageReference Include="Scalar.AspNetCore" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Formatting.Compact" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+  </ItemGroup>
+
+  <!--
+    Deliberately absent: a PackageReference to Dapper. Data access belongs in
+    Sol.Infrastructure, where the Dapper.AOT source generator runs. A Dapper call
+    added here would compile as reflection Dapper and throw only at runtime under AOT.
+  -->
+
+</Project>

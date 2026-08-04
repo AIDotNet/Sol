@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sol.Domain/Sol.Domain.csproj" />
+    <Project Path="src/Sol.Application/Sol.Application.csproj" />
+    <Project Path="src/Sol.Infrastructure/Sol.Infrastructure.csproj" />
+    <Project Path="src/Sol.Api/Sol.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sol.UnitTests/Sol.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/solution items/">
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="docker-compose.yml" />
+    <File Path="global.json" />
+  </Folder>
+</Solution>

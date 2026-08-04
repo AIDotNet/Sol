@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Domain has ZERO external dependencies — no NuGet packages, no ProjectReferences.
+    Shared properties (TFM, nullable, IsAotCompatible) come from Directory.Build.props.
+  -->
+
+</Project>

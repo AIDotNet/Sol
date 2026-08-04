@@ -1,0 +1,294 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Canvas motion
+   ---------------------------------------------------------------------------
+   Every animation below moves only `opacity` and `transform`. Those two are the
+   properties a compositor can run without the main thread, so they keep working
+   at full rate while the canvas is busy. Anything that triggers layout — width,
+   top, margin — would queue behind the same frames a pan is already competing
+   for, which is the opposite of what this file is for.
+   --------------------------------------------------------------------------- */
+
+@keyframes canvas-rise {
+  from {
+    opacity: 0;
+    transform: translateY(-0.375rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes canvas-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes canvas-fade {
+  from {
+    opacity: 0;
+    transform: translateY(0.125rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Left-to-right highlight over a node that is generating. */
+@keyframes canvas-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Breathing ring on a node with a run in flight. */
+@keyframes canvas-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@layer components {
+  /*
+   * Floating chrome over the canvas: the project pill, the two toolbars, the context menu.
+   *
+   * `backdrop-filter` makes the compositor re-sample and re-blur whatever sits underneath on
+   * every frame it paints. Over a canvas being dragged those pixels change every frame, so the
+   * blur was being recomputed continuously for three separate panels — the single largest cost
+   * in a pan, and all of it spent on chrome the user is not even looking at mid-gesture.
+   *
+   * So the blur is dropped for the duration of a gesture. The background steps up to fully
+   * opaque in the same rule, because a panel that is 85% transparent with nothing blurring
+   * behind it turns into unreadable text over moving artwork.
+   */
+  .canvas-panel {
+    background-color: color-mix(in oklab, var(--background) 85%, transparent);
+    animation: canvas-rise 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transition: background-color 120ms ease-out;
+  }
+
+  @supports (backdrop-filter: blur(1px)) {
+    .canvas-panel {
+      backdrop-filter: blur(8px);
+    }
+
+    /* Set on the canvas wrapper while a pan, zoom, or node drag is in flight. */
+    [data-interacting] .canvas-panel {
+      background-color: var(--background);
+      backdrop-filter: none;
+    }
+  }
+
+  .canvas-menu {
+    animation: canvas-pop 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .canvas-fade-in {
+    animation: canvas-fade 200ms ease-out both;
+  }
+
+  /*
+   * A node arriving on the canvas.
+   *
+   * Scoped to the node's own frame rather than React Flow's wrapper: the wrapper carries the
+   * transform that positions the node, and animating it would fight the library for the same
+   * property. Handles and the resize outline read node width/height from the store, so they
+   * stay put while this plays.
+   */
+  .canvas-node {
+    animation: canvas-pop 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transition:
+      box-shadow 160ms ease-out,
+      border-color 160ms ease-out;
+  }
+
+  /* No entrance replay for the fifty nodes that mount at once when a project opens. */
+  [data-hydrating] .canvas-node {
+    animation: none;
+  }
+
+  .canvas-node-busy::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1.5px var(--ring);
+    animation: canvas-breathe 1.8s ease-in-out infinite;
+  }
+
+  .canvas-sweep::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklab, var(--foreground) 8%, transparent),
+      transparent
+    );
+    animation: canvas-sweep 1.6s ease-in-out infinite;
+  }
+}
+
+/*
+ * Someone who has asked the system for less motion is usually asking because motion costs them
+ * something — comfort, or a device that cannot afford it. Both readings say: drop it entirely,
+ * rather than shorten it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .canvas-panel,
+  .canvas-menu,
+  .canvas-fade-in,
+  .canvas-node,
+  .canvas-node-busy::after,
+  .canvas-sweep::after {
+    animation: none;
+  }
+}

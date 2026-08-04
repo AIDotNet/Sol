@@ -1,0 +1,71 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Data access">
+    <PackageVersion Include="Dapper" Version="2.1.79" />
+    <PackageVersion Include="Dapper.AOT" Version="1.0.52" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Npgsql.DependencyInjection" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Infrastructure">
+    <PackageVersion Include="StackExchange.Redis" Version="3.0.25" />
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Web / realtime">
+    <!-- Must stay in lockstep with the SDK preview band pinned in global.json. -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="11.0.0-preview.5.26302.115" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="11.0.0-preview.5.26302.115" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.16.16" />
+  </ItemGroup>
+
+  <ItemGroup Label="Validation and options">
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="11.0.0-preview.5.26302.115" />
+  </ItemGroup>
+
+  <ItemGroup Label="Extensions abstractions">
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0-preview.5.26302.115" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="11.0.0-preview.5.26302.115" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="11.0.0-preview.5.26302.115" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="11.0.0-preview.5.26302.115" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.0.0-preview.5.26302.115" />
+    <!-- IHttpClientFactory, for the upstream AI provider calls. -->
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0-preview.5.26302.115" />
+  </ItemGroup>
+
+  <ItemGroup Label="Observability">
+    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+  </ItemGroup>
+
+  <!--
+    Transitive pin. Microsoft.AspNetCore.OpenApi drags in Microsoft.OpenApi 3.3.1, which is
+    vulnerable to CVE-2026-49451 (uncontrolled recursion on circular $ref, GHSA-v5pm-xwqc-g5wc).
+    Patched in 3.5.4.
+  -->
+  <ItemGroup Label="Security overrides">
+    <PackageVersion Include="Microsoft.OpenApi" Version="3.9.0" />
+    <!--
+      SignalR's Redis backplane pulls in MessagePack 2.5.187, which has an out-of-bounds read
+      in the LZ4 decompression path (CVE / GHSA-hv8m-jj95-wg3x, plus several moderate advisories).
+      Patched in 2.5.301. Staying on the v2 line rather than 3.x, which SignalR does not expect.
+    -->
+    <PackageVersion Include="MessagePack" Version="2.5.301" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit.v3" Version="3.1.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.0" />
+  </ItemGroup>
+
+</Project>

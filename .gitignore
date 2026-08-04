@@ -1,0 +1,26 @@
+## .NET
+bin/
+obj/
+generated/
+*.user
+*.suo
+publish/
+artifacts/
+
+## Rider / VS / VS Code
+.idea/
+.vs/
+.vscode/
+
+## macOS
+.DS_Store
+
+## Secrets — the device fingerprint pepper and connection strings must never be committed
+*.env
+.env.*
+appsettings.*.local.json
+secrets.json
+
+## Node (web/ has its own .gitignore, this is a backstop)
+node_modules/
+.next/
