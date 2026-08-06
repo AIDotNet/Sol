@@ -21,6 +21,7 @@ public sealed record ProviderResponse(
     bool HasApiKey,
     string? ApiKeyHint,
     int SortOrder,
+    int? PresetVersion,
     string CreatedAt,
     string UpdatedAt,
     ModelResponse[] Models);
@@ -115,8 +116,11 @@ public sealed record ImportConfigRequest(ImportProviderEntry[] Providers);
 
 public sealed record ImportProviderEntry(
     string? BuiltinId,
-    string Name,
-    string Type,
+    string? Name,
+    string? Description,
+    string? Icon,
+    int? PresetVersion,
+    string? Type,
     string? ApiKey,
     string? BaseUrl,
     CreateModelRequest[]? Models);

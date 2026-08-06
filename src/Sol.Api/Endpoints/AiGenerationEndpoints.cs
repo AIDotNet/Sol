@@ -50,6 +50,12 @@ public static class AiGenerationEndpoints
     /// <summary>How many assets the library shows by default.</summary>
     private const int DefaultAssetPageSize = 60;
 
+    /// <summary>Maximum length for a user-created asset group name.</summary>
+    private const int MaxAssetGroupNameLength = 64;
+
+    /// <summary>Maximum number of assets one bulk assignment may touch.</summary>
+    private const int MaxAssetsPerAssignment = 200;
+
     /// <summary>
     /// Hard ceiling on one listing. The library is a picker, not an archive browser, and a
     /// device with thousands of generations should not be able to ask for all of them at once.
@@ -65,6 +71,29 @@ public static class AiGenerationEndpoints
         app.MapPost("/api/v1/ai/text", GenerateTextAsync)
             .WithTags("ai")
             .WithName("GenerateText");
+
+        // Literal group routes are registered before the `/{id}` media route. ASP.NET's route
+        // matcher still prefers the literal segment, while keeping all asset-library operations
+        // under one discoverable prefix.
+        app.MapGet("/api/v1/canvas/assets/groups", ListAssetGroupsAsync)
+            .WithTags("canvas")
+            .WithName("ListCanvasAssetGroups");
+
+        app.MapPost("/api/v1/canvas/assets/groups", CreateAssetGroupAsync)
+            .WithTags("canvas")
+            .WithName("CreateCanvasAssetGroup");
+
+        app.MapPatch("/api/v1/canvas/assets/groups/{id}", RenameAssetGroupAsync)
+            .WithTags("canvas")
+            .WithName("RenameCanvasAssetGroup");
+
+        app.MapDelete("/api/v1/canvas/assets/groups/{id}", DeleteAssetGroupAsync)
+            .WithTags("canvas")
+            .WithName("DeleteCanvasAssetGroup");
+
+        app.MapPatch("/api/v1/canvas/assets/group", AssignAssetsToGroupAsync)
+            .WithTags("canvas")
+            .WithName("AssignCanvasAssetsToGroup");
 
         app.MapGet("/api/v1/canvas/assets/{id}", GetAssetAsync)
             .WithTags("canvas")
@@ -464,8 +493,167 @@ public static class AiGenerationEndpoints
                 asset.MediaType,
                 asset.ByteSize,
                 asset.Prompt,
-                asset.CreatedAt.ToString("O"))),
+                asset.CreatedAt.ToString("O"),
+                asset.GroupId?.ToString())),
         ]));
+    }
+
+    /// <summary>Lists the folders in the device's asset library.</summary>
+    private static async Task<Results<Ok<CanvasAssetGroupListResponse>, UnauthorizedHttpResult>>
+        ListAssetGroupsAsync(
+            HttpContext http,
+            ICanvasAssetRepository assets,
+            CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var groups = await assets.ListGroupsAsync(deviceId, ct);
+
+        return TypedResults.Ok(new CanvasAssetGroupListResponse(
+        [
+            .. groups.Select(ToGroupSummary),
+        ]));
+    }
+
+    /// <summary>Creates a folder without moving any media into it yet.</summary>
+    private static async Task<Results<Created<CanvasAssetGroupSummary>, BadRequest<ErrorResponse>,
+        UnauthorizedHttpResult, Conflict<ErrorResponse>>> CreateAssetGroupAsync(
+        CreateCanvasAssetGroupRequest request,
+        HttpContext http,
+        ICanvasAssetRepository assets,
+        CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        if (!TryNormalizeGroupName(request.Name, out var name, out var error))
+        {
+            return Invalid(error);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var groupId = Guid.CreateVersion7();
+        var created = await assets.InsertGroupAsync(
+            new CanvasAssetGroup(groupId, deviceId, name, 0, now, now), ct);
+
+        return created is null
+            ? TypedResults.Conflict(new ErrorResponse(
+                "duplicate_name", [$"An asset group named '{name}' already exists."]))
+            : TypedResults.Created(
+                $"/api/v1/canvas/assets/groups/{groupId}", ToGroupSummary(created));
+    }
+
+    /// <summary>Renames a folder while preserving all of its asset assignments.</summary>
+    private static async Task<Results<Ok<CanvasAssetGroupSummary>, BadRequest<ErrorResponse>,
+        UnauthorizedHttpResult, NotFound, Conflict<ErrorResponse>>> RenameAssetGroupAsync(
+        string id,
+        UpdateCanvasAssetGroupRequest request,
+        HttpContext http,
+        ICanvasAssetRepository assets,
+        CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        if (!Guid.TryParse(id, out var groupId) || groupId == Guid.Empty)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!TryNormalizeGroupName(request.Name, out var name, out var error))
+        {
+            return Invalid(error);
+        }
+
+        if (await assets.FindGroupAsync(deviceId, groupId, ct) is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var renamed = await assets.RenameGroupAsync(deviceId, groupId, name, DateTimeOffset.UtcNow, ct);
+        return renamed is null
+            ? TypedResults.Conflict(new ErrorResponse(
+                "duplicate_name", [$"An asset group named '{name}' already exists."]))
+            : TypedResults.Ok(ToGroupSummary(renamed));
+    }
+
+    /// <summary>Deletes a folder and leaves its media in the ungrouped bucket.</summary>
+    private static async Task<Results<NoContent, NotFound, UnauthorizedHttpResult>>
+        DeleteAssetGroupAsync(
+            string id,
+            HttpContext http,
+            ICanvasAssetRepository assets,
+            CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        if (!Guid.TryParse(id, out var groupId) || groupId == Guid.Empty)
+        {
+            return TypedResults.NotFound();
+        }
+
+        return await assets.DeleteGroupAsync(deviceId, groupId, ct)
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound();
+    }
+
+    /// <summary>Moves a selection into a folder, or clears its folder when groupId is null.</summary>
+    private static async Task<Results<Ok<AssignCanvasAssetsResponse>, BadRequest<ErrorResponse>,
+        UnauthorizedHttpResult, NotFound>> AssignAssetsToGroupAsync(
+        AssignCanvasAssetsRequest request,
+        HttpContext http,
+        ICanvasAssetRepository assets,
+        CancellationToken ct)
+    {
+        if (http.GetDeviceId() is not { } deviceId)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        if (request.AssetIds is null || request.AssetIds.Length is < 1 or > MaxAssetsPerAssignment)
+        {
+            return Invalid($"assetIds must contain between 1 and {MaxAssetsPerAssignment} items");
+        }
+
+        var ids = new List<Guid>(request.AssetIds.Length);
+        foreach (var raw in request.AssetIds)
+        {
+            if (!Guid.TryParse(raw, out var assetId) || assetId == Guid.Empty)
+            {
+                return Invalid("assetIds contains a malformed id");
+            }
+
+            if (!ids.Contains(assetId)) ids.Add(assetId);
+        }
+
+        Guid? groupId = null;
+        if (request.GroupId is not null)
+        {
+            if (!Guid.TryParse(request.GroupId, out var parsed) || parsed == Guid.Empty)
+            {
+                return Invalid("groupId must be a valid id or null");
+            }
+
+            if (await assets.FindGroupAsync(deviceId, parsed, ct) is null)
+            {
+                return TypedResults.NotFound();
+            }
+
+            groupId = parsed;
+        }
+
+        var updated = await assets.AssignGroupAsync(deviceId, ids, groupId, ct);
+        return TypedResults.Ok(new AssignCanvasAssetsResponse(updated));
     }
 
     /// <summary>
@@ -640,6 +828,36 @@ public static class AiGenerationEndpoints
         "video/mp4" => ".mp4",
         _ => ".bin",
     };
+
+    private static CanvasAssetGroupSummary ToGroupSummary(CanvasAssetGroup group) =>
+        new(
+            group.GroupId.ToString(),
+            group.Name,
+            group.AssetCount,
+            group.CreatedAt.ToString("O"),
+            group.UpdatedAt.ToString("O"));
+
+    private static bool TryNormalizeGroupName(
+        string? value,
+        out string name,
+        out string error)
+    {
+        name = value?.Trim() ?? string.Empty;
+        if (name.Length == 0)
+        {
+            error = "name is required";
+            return false;
+        }
+
+        if (name.Length > MaxAssetGroupNameLength)
+        {
+            error = $"name must be {MaxAssetGroupNameLength} characters or fewer";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
 
     private static BadRequest<ErrorResponse> Invalid(string detail) =>
         TypedResults.BadRequest(new ErrorResponse("invalid_request", [detail]));

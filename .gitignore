@@ -11,9 +11,11 @@ artifacts/
 .idea/
 .vs/
 .vscode/
+.claude/worktrees/
 
 ## macOS
 .DS_Store
+Library/
 
 ## Secrets — the device fingerprint pepper and connection strings must never be committed
 *.env

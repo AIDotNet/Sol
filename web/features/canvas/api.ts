@@ -141,6 +141,16 @@ export interface CanvasAssetSummary {
   /** The prompt that produced it, when it was generated rather than uploaded. */
   prompt: string | null;
   createdAt: string;
+  /** The folder this asset belongs to, or null when it is in the ungrouped bucket. */
+  groupId: string | null;
+}
+
+export interface CanvasAssetGroupSummary {
+  id: string;
+  name: string;
+  assetCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**
@@ -152,6 +162,43 @@ export function listAssets(
   kind?: "image" | "video",
 ): Promise<{ assets: CanvasAssetSummary[] }> {
   return request(`/assets${kind ? `?kind=${kind}` : ""}`);
+}
+
+/** Lists user-created folders in the asset library. */
+export function listAssetGroups(): Promise<{ groups: CanvasAssetGroupSummary[] }> {
+  return request("/assets/groups");
+}
+
+/** Creates a folder without assigning any assets. */
+export function createAssetGroup(name: string): Promise<CanvasAssetGroupSummary> {
+  return request("/assets/groups", { method: "POST", body: JSON.stringify({ name }) });
+}
+
+/** Renames a folder while keeping its asset assignments. */
+export function renameAssetGroup(
+  id: string,
+  name: string,
+): Promise<CanvasAssetGroupSummary> {
+  return request(`/assets/groups/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+/** Deletes a folder; the server leaves its assets available as ungrouped. */
+export function deleteAssetGroup(id: string): Promise<void> {
+  return request(`/assets/groups/${id}`, { method: "DELETE" });
+}
+
+/** Moves a selection into a folder. Pass null to remove the current assignment. */
+export function assignAssetsToGroup(
+  assetIds: string[],
+  groupId: string | null,
+): Promise<{ updated: number }> {
+  return request("/assets/group", {
+    method: "PATCH",
+    body: JSON.stringify({ assetIds, groupId }),
+  });
 }
 
 /**

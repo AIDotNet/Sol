@@ -26,6 +26,7 @@ internal static class AiContractMapper
         provider.HasApiKey,
         provider.ApiKey?.Hint,
         provider.SortOrder,
+        provider.PresetVersion,
         provider.CreatedAt.ToString("O"),
         provider.UpdatedAt.ToString("O"),
         [.. provider.Models.Select(ToResponse)]);

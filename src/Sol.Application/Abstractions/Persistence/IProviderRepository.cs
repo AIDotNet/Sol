@@ -22,6 +22,9 @@ public interface IProviderRepository
     /// <summary>Looks a provider up by its unique per-device name, for URL import upserts.</summary>
     Task<AiProvider?> FindByNameAsync(DeviceId deviceId, string name, CancellationToken ct);
 
+    /// <summary>Looks up a built-in provider by its stable preset id within one device.</summary>
+    Task<AiProvider?> FindByBuiltinIdAsync(DeviceId deviceId, string builtinId, CancellationToken ct);
+
     Task InsertAsync(AiProvider provider, CancellationToken ct);
 
     /// <summary>

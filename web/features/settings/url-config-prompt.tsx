@@ -2,7 +2,7 @@
 
 import { ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,100 +13,136 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { importConfig } from "@/features/ai/api";
-import { findPreset } from "@/features/ai/presets";
 import { ProviderIcon } from "@/features/ai/provider-icons";
 import { useAiStore } from "@/features/ai/store";
-import type { ProviderType } from "@/features/ai/types";
 import {
-  maskApiKey,
   parseQuickConfigFromLocation,
-  toImportPayload,
+  resolveQuickConfig,
+  maskApiKey,
   urlWithoutQuickConfig,
+  type QuickConfigResult,
 } from "@/features/settings/url-config";
 
 /**
- * Detects a `?settings=` share link and asks before applying it.
- *
- * The confirmation is not a formality. The payload is attacker-controlled and carries an API key
- * in plain text, so the user is shown exactly which providers would be written, with keys masked,
- * before anything touches their device. The parameter is stripped from the URL on both paths —
- * applying and discarding — so a reload cannot silently re-prompt and the key stops sitting in
- * the address bar and in `document.referrer`.
+ * Detects a `?settings=`/`#settings=` share link and applies it after the device-scoped provider
+ * list has loaded. A URL is not a trust boundary: a link containing a key always requires an
+ * explicit confirmation, even when it asks for `autoApply`.
  */
 export function UrlConfigPrompt() {
   const t = useT();
   const router = useRouter();
   const providers = useAiStore((state) => state.providers);
+  const load = useAiStore((state) => state.load);
   const refresh = useAiStore((state) => state.refresh);
+  const storeError = useAiStore((state) => state.error);
 
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [providersReady, setProvidersReady] = useState(false);
+  const autoApplyStarted = useRef(false);
 
-  // Parsed once at mount. The query string is fixed for this mount, so the prompt's contents
-  // are derived rather than copied into state — no effect, no extra render pass.
-  const [initial] = useState(() =>
+  // Parsed once at mount. The location is fixed for this mount, so the payload remains stable
+  // while the provider store finishes loading.
+  const [initial] = useState<QuickConfigResult>(() =>
     typeof window === "undefined"
-      ? ({ ok: false, reason: "absent" } as const)
+      ? { ok: false, reason: "absent" }
       : parseQuickConfigFromLocation(window.location),
   );
 
   const config = !dismissed && initial.ok ? initial.config : null;
-  const parseError = !dismissed && !initial.ok && initial.reason === "malformed"
-    ? initial.detail
-    : null;
+  const parseError =
+    !dismissed && !initial.ok && initial.reason === "malformed" ? initial.detail : null;
 
-  // Strips the parameter as soon as anything was found, so a reload cannot re-prompt and the
-  // key stops sitting in the address bar and in document.referrer.
+  const resolved = useMemo(
+    () => (config && providersReady ? resolveQuickConfig(config, providers) : null),
+    [config, providers, providersReady],
+  );
+
+  // Strip the parameter as soon as anything was found, so a reload cannot re-prompt and the key
+  // stops sitting in the address bar. The captured config remains in React state for this mount.
   useEffect(() => {
     if (initial.ok || (!initial.ok && initial.reason === "malformed")) {
       router.replace(urlWithoutQuickConfig(window.location.href), { scroll: false });
     }
   }, [initial, router]);
 
-  function dismiss() {
+  // Ensure the prompt can also be used on a page where the canvas has not requested AI loading
+  // yet. The store shares this promise with CanvasInner, so this does not create a second load;
+  // `providersReady` deliberately waits for the seed pass as well as the initial list request.
+  useEffect(() => {
+    if (!initial.ok) return;
+
+    let cancelled = false;
+    void load().then(
+      () => {
+        if (!cancelled) setProvidersReady(true);
+      },
+      () => {
+        // `refresh` normally converts request failures into storeError. Still unblock the
+        // dialog if an unexpected seed/storage failure rejects the shared load promise.
+        if (!cancelled) setProvidersReady(true);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initial, load]);
+
+  const dismiss = useCallback(() => {
     setDismissed(true);
     setApplyError(null);
-  }
+  }, []);
 
-  async function apply() {
-    if (!config) return;
+  const apply = useCallback(
+    async (silent: boolean) => {
+      if (!resolved) return;
 
-    setBusy(true);
-    setApplyError(null);
+      setBusy(true);
+      setApplyError(null);
 
-    try {
-      const payload = {
-        providers: config.providers.map((provider) => {
-          const preset = findPreset(provider.builtinId);
-          const fallbackType: ProviderType = preset?.type ?? "openai-chat";
-          const entry = toImportPayload(provider, fallbackType);
+      try {
+        const { created, updated } = await importConfig({
+          providers: resolved.providers,
+        });
+        await refresh();
 
-          // A link naming a known preset but omitting the URL still resolves, because the
-          // preset supplies the default.
-          return {
-            ...entry,
-            baseUrl: entry.baseUrl ?? preset?.defaultBaseUrl ?? null,
-          };
-        }),
-      };
+        if (!silent) {
+          window.alert(t("urlConfig.applied", { count: created + updated }));
+        }
+        dismiss();
+      } catch (error) {
+        setApplyError(error instanceof Error ? error.message : t("errors.unknown"));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [dismiss, refresh, resolved, t],
+  );
 
-      const { created, updated } = await importConfig(payload);
-      await refresh();
-
-      window.alert(t("urlConfig.applied", { count: created + updated }));
-      dismiss();
-    } catch (error) {
-      setApplyError(error instanceof Error ? error.message : t("errors.unknown"));
-      setBusy(false);
+  // `autoApply` is intentionally weaker than a user confirmation: it is honored only when the
+  // link contains no plaintext API key. A malicious link cannot opt itself out of confirmation.
+  useEffect(() => {
+    if (
+      !resolved ||
+      !resolved.autoApply ||
+      resolved.requiresConfirmation ||
+      storeError ||
+      autoApplyStarted.current
+    ) {
+      return;
     }
-  }
+
+    autoApplyStarted.current = true;
+    void apply(true);
+  }, [apply, resolved, storeError]);
 
   if (parseError) {
     return (
       <Dialog
         isOpen
-        onOpenChange={() => setDismissed(true)}
+        onOpenChange={() => dismiss()}
         className="w-[min(28rem,calc(100vw-2rem))] max-w-none sm:max-w-none"
       >
         <DialogHeader>
@@ -114,7 +150,7 @@ export function UrlConfigPrompt() {
           <DialogDescription>{parseError}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button size="sm" onPress={() => setDismissed(true)}>
+          <Button size="sm" onPress={dismiss}>
             {t("common.close")}
           </Button>
         </DialogFooter>
@@ -122,9 +158,11 @@ export function UrlConfigPrompt() {
     );
   }
 
-  if (!config) return null;
-
-  const existingNames = new Set(providers.map((p) => p.name.toLowerCase()));
+  // The import is intentionally held until the device-scoped provider list is ready. This makes
+  // the overwrite preview and built-in ID matching deterministic on a first visit.
+  if (!resolved || (resolved.autoApply && !resolved.requiresConfirmation && !applyError)) {
+    return null;
+  }
 
   return (
     <Dialog
@@ -143,32 +181,48 @@ export function UrlConfigPrompt() {
           className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-500"
           aria-hidden
         />
-        <p className="text-xs leading-relaxed text-muted-foreground">{t("urlConfig.warning")}</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {resolved.requiresConfirmation ? t("urlConfig.warning") : t("urlConfig.noKeyWarning")}
+        </p>
       </div>
 
       <div className="flex max-h-64 flex-col gap-1.5 overflow-y-auto">
-        {config.providers.map((provider, index) => {
-          const preset = findPreset(provider.builtinId);
-          const name = provider.name ?? provider.builtinId ?? "";
-          const overwrites = existingNames.has(name.toLowerCase());
+        {resolved.providers.map((provider, index) => {
+          const existing = provider.builtinId
+            ? providers.find((candidate) => candidate.builtinId === provider.builtinId)
+            : providers.find(
+                (candidate) =>
+                  candidate.name.trim().toLowerCase() === provider.name.trim().toLowerCase(),
+              );
+          const overwrites = existing !== undefined;
 
           return (
             <div
-              key={`${name}-${index}`}
+              key={`${provider.builtinId ?? provider.name}-${index}`}
               className="flex items-center gap-2.5 rounded-lg border p-2.5"
             >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background ring-1 ring-border">
-                <ProviderIcon builtinId={provider.builtinId} name={name} size={17} />
+                <ProviderIcon
+                  builtinId={provider.builtinId}
+                  icon={provider.icon}
+                  name={provider.name}
+                  size={17}
+                />
               </span>
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium">{name}</p>
+                <p className="truncate text-xs font-medium">{provider.name}</p>
                 <p className="truncate text-[0.6875rem] text-muted-foreground">
-                  {provider.baseUrl ?? preset?.defaultBaseUrl ?? ""}
+                  {provider.baseUrl ?? ""}
                 </p>
                 {overwrites && (
                   <p className="text-[0.6875rem] text-amber-600 dark:text-amber-500">
                     {t("urlConfig.willOverwrite")}
+                  </p>
+                )}
+                {provider.models.length === 0 && (
+                  <p className="text-[0.6875rem] text-amber-600 dark:text-amber-500">
+                    {t("urlConfig.noModels")}
                   </p>
                 )}
               </div>
@@ -181,7 +235,7 @@ export function UrlConfigPrompt() {
                 )}
                 {provider.models.length > 0 && (
                   <p className="text-[0.6875rem] text-muted-foreground">
-                    {provider.models.length} models
+                    {t("urlConfig.models", { count: provider.models.length })}
                   </p>
                 )}
               </div>
@@ -196,8 +250,8 @@ export function UrlConfigPrompt() {
         <Button variant="outline" size="sm" onPress={dismiss} isDisabled={busy}>
           {t("urlConfig.discard")}
         </Button>
-        <Button size="sm" onPress={() => void apply()} isDisabled={busy}>
-          {t("urlConfig.apply", { count: config.providers.length })}
+        <Button size="sm" onPress={() => void apply(false)} isDisabled={busy}>
+          {t("urlConfig.apply", { count: resolved.providers.length })}
         </Button>
       </DialogFooter>
     </Dialog>

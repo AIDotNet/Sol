@@ -59,6 +59,8 @@ export interface AiProvider {
   id: string;
   /** Set when this provider came from a built-in preset; null for user-defined ones. */
   builtinId?: string | null;
+  /** Version of the preset that supplied this provider, when one was used. */
+  presetVersion?: number | null;
   name: string;
   description?: string | null;
   /** User-supplied icon (data URL). Falls back to the preset's logo. */

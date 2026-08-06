@@ -10,6 +10,7 @@ Sol 是一个 .NET 11 Native AOT 后端：SignalR 实时通信、无账号体系
 | [aot-constraints.md](aot-constraints.md) | **最重要的一篇**：AOT 禁用清单与实测结论 |
 | [device-identification.md](device-identification.md) | 设备识别设计、能力边界、合规义务 |
 | [ai-canvas-api.md](ai-canvas-api.md) | AI 渠道/生成/画布端点、协议矩阵、Key 与资产的安全边界 |
+| [ai-provider-url-config.md](ai-provider-url-config.md) | AI 服务商 URL 自动配置的载荷、编码、导入语义与对接示例 |
 | [realtime-signalr.md](realtime-signalr.md) | Hub 契约、分组、连接绑定、backplane |
 | [data-model.md](data-model.md) | 表结构、索引理由、迁移约定 |
 | [local-development.md](local-development.md) | 环境准备、启动、联调、排错 |

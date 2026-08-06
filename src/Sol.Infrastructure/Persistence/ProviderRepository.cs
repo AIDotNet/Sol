@@ -121,9 +121,43 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
             $"""
             SELECT {ProviderColumns}
             FROM ai_provider
-            WHERE device_id = @DeviceId AND name = @Name
+            WHERE device_id = @DeviceId AND lower(name) = lower(@Name)
             """,
             new ProviderNameParam { DeviceId = deviceId.Value, Name = name });
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        var provider = row.ToDomain();
+
+        var modelRows = await connection.QueryAsync<ModelRow>(
+            $"""
+            SELECT {ModelColumns}
+            FROM ai_model
+            WHERE provider_id = @ProviderId
+            ORDER BY sort_order, created_at
+            """,
+            new ProviderIdParam { ProviderId = provider.Id.Value });
+
+        return provider with { Models = modelRows.Select(r => r.ToDomain()).ToList() };
+    }
+
+    public async Task<AiProvider?> FindByBuiltinIdAsync(
+        DeviceId deviceId,
+        string builtinId,
+        CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+
+        var row = await connection.QueryFirstOrDefaultAsync<ProviderRow>(
+            $"""
+            SELECT {ProviderColumns}
+            FROM ai_provider
+            WHERE device_id = @DeviceId AND builtin_id = @BuiltinId
+            """,
+            new ProviderBuiltinParam { DeviceId = deviceId.Value, BuiltinId = builtinId });
 
         if (row is null)
         {
@@ -203,8 +237,9 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
         await connection.ExecuteAsync(
             $"""
             UPDATE ai_provider
-            SET name = @Name, description = @Description, icon = @Icon, type = @Type,
-                base_url = @BaseUrl, enabled = @Enabled, sort_order = @SortOrder,
+            SET builtin_id = @BuiltinId, name = @Name, description = @Description, icon = @Icon,
+                type = @Type, base_url = @BaseUrl, enabled = @Enabled,
+                preset_version = @PresetVersion, sort_order = @SortOrder,
                 {keyClause}
                 updated_at = @UpdatedAt
             WHERE provider_id = @ProviderId AND device_id = @DeviceId
@@ -213,12 +248,14 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
             {
                 ProviderId = provider.Id.Value,
                 DeviceId = provider.DeviceId.Value,
+                BuiltinId = provider.BuiltinId,
                 Name = provider.Name,
                 Description = provider.Description,
                 Icon = provider.Icon,
                 Type = provider.Type.ToWire(),
                 BaseUrl = provider.BaseUrl,
                 Enabled = provider.Enabled,
+                PresetVersion = provider.PresetVersion,
                 SortOrder = provider.SortOrder,
                 UpdatedAt = provider.UpdatedAt,
                 ApiKeyCipher = apiKey.Secret?.Cipher,
@@ -425,6 +462,12 @@ internal sealed class ProviderNameParam
     public string Name { get; init; } = string.Empty;
 }
 
+internal sealed class ProviderBuiltinParam
+{
+    public Guid DeviceId { get; init; }
+    public string BuiltinId { get; init; } = string.Empty;
+}
+
 internal sealed class ModelScopeParam
 {
     public Guid ModelId { get; init; }
@@ -462,12 +505,14 @@ internal sealed class UpdateProviderParams
 {
     public Guid ProviderId { get; init; }
     public Guid DeviceId { get; init; }
+    public string? BuiltinId { get; init; }
     public string Name { get; init; } = string.Empty;
     public string? Description { get; init; }
     public string? Icon { get; init; }
     public string Type { get; init; } = string.Empty;
     public string BaseUrl { get; init; } = string.Empty;
     public bool Enabled { get; init; }
+    public int? PresetVersion { get; init; }
     public int SortOrder { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
     public byte[]? ApiKeyCipher { get; init; }

@@ -294,6 +294,9 @@ export interface ImportConfigPayload {
   providers: Array<{
     builtinId: string | null;
     name: string;
+    description: string | null;
+    icon: string | null;
+    presetVersion: number | null;
     type: ProviderType;
     apiKey: string | null;
     baseUrl: string | null;

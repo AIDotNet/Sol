@@ -73,4 +73,35 @@ public class NormalizeBaseUrlTests
             "https://relay.example.com/v1/anthropic",
             AiProvider.NormalizeBaseUrl("https://relay.example.com/v1/anthropic", ProviderType.Anthropic));
     }
+
+    [Theory]
+    [InlineData("https://api.example.com/v1")]
+    [InlineData("http://localhost:11434/v1")]
+    [InlineData("http://127.0.0.1:8080")]
+    public void AcceptsAbsoluteHttpUrlsIncludingLocalRuntimes(string input)
+    {
+        Assert.True(
+            AiProvider.TryNormalizeBaseUrl(
+                input,
+                ProviderType.OpenAiChat,
+                out var normalized,
+                out _));
+        Assert.NotEmpty(normalized);
+    }
+
+    [Theory]
+    [InlineData("/v1")]
+    [InlineData("file:///tmp/provider")]
+    [InlineData("https://user:password@example.com/v1")]
+    [InlineData("https://api.example.com/v1?token=secret")]
+    [InlineData("https://api.example.com/v1#fragment")]
+    public void RejectsUrlsThatCannotBeSafelyAppendedTo(string input)
+    {
+        Assert.False(
+            AiProvider.TryNormalizeBaseUrl(
+                input,
+                ProviderType.OpenAiChat,
+                out _,
+                out _));
+    }
 }

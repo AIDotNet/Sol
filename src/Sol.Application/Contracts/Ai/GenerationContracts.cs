@@ -81,6 +81,26 @@ public sealed record CanvasAssetSummary(
     string MediaType,
     long ByteSize,
     string? Prompt,
-    string CreatedAt);
+    string CreatedAt,
+    string? GroupId);
 
 public sealed record CanvasAssetListResponse(CanvasAssetSummary[] Assets);
+
+/// <summary>A user-created group in the canvas asset library.</summary>
+public sealed record CanvasAssetGroupSummary(
+    string Id,
+    string Name,
+    int AssetCount,
+    string CreatedAt,
+    string UpdatedAt);
+
+public sealed record CanvasAssetGroupListResponse(CanvasAssetGroupSummary[] Groups);
+
+public sealed record CreateCanvasAssetGroupRequest(string Name);
+
+public sealed record UpdateCanvasAssetGroupRequest(string Name);
+
+/// <summary>Moves several owned assets into a group; a null group id means ungroup them.</summary>
+public sealed record AssignCanvasAssetsRequest(string[] AssetIds, string? GroupId);
+
+public sealed record AssignCanvasAssetsResponse(int Updated);

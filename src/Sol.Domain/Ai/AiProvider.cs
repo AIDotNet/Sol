@@ -165,6 +165,53 @@ public sealed record AiProvider(
         };
     }
 
+    /// <summary>
+    /// Validates and normalizes a provider base URL supplied by an external client.
+    /// </summary>
+    /// <remarks>
+    /// Provider URLs are user-selected, so local hosts remain valid for runtimes such as Ollama.
+    /// Credentials, query strings and fragments are rejected because protocol clients append
+    /// paths to this value and must never receive a URL that can smuggle a second authority or
+    /// secret through persistence.
+    /// </remarks>
+    public static bool TryNormalizeBaseUrl(
+        string? baseUrl,
+        ProviderType protocol,
+        out string normalized,
+        out string error)
+    {
+        normalized = string.Empty;
+        error = "baseUrl must be an absolute HTTP(S) URL";
+
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return false;
+        }
+
+        var trimmed = baseUrl.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || string.IsNullOrWhiteSpace(uri.Host))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(uri.UserInfo))
+        {
+            error = "baseUrl must not include credentials";
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+        {
+            error = "baseUrl must not include a query or fragment";
+            return false;
+        }
+
+        normalized = NormalizeBaseUrl(trimmed, protocol);
+        return true;
+    }
+
     private static string StripSuffix(string value, string suffix) =>
         value.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
             ? value[..^suffix.Length].TrimEnd('/')

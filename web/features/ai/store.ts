@@ -32,6 +32,11 @@ const EMPTY_SLOT: ModelSlot = { providerId: null, modelId: null };
  * a user who deletes the seeded provider should not have it come back on the next launch. */
 const AUTO_SEEDED_BUILTIN_IDS = ["routin-ai"];
 
+// A URL import and the canvas can request the initial provider load at the same time. Sharing
+// the in-flight promise makes both callers wait for the complete list + best-effort seeding pass
+// instead of racing an import against the seed operation.
+let providerLoadPromise: Promise<void> | null = null;
+
 function autoSeedStorageKey(builtinId: string): string {
   return `sol.auto-seeded.${builtinId}`;
 }
@@ -161,11 +166,26 @@ export const useAiStore = create<AiState>((set, get) => ({
 
   /** Fetches once. Repeated calls while loaded are no-ops, so components can call it freely. */
   load: async () => {
-    if (get().loading || get().loaded) return;
-    await get().refresh();
+    // `refresh` marks the store loaded before the best-effort preset seed finishes. Callers that
+    // arrive during that window must still join the in-flight load, or a URL import can race the
+    // seed create/refresh cycle.
+    if (providerLoadPromise) {
+      await providerLoadPromise;
+      return;
+    }
 
-    const seeded = await seedBuiltinProviders(get().providers, api.createProvider);
-    if (seeded) await get().refresh();
+    if (get().loaded) return;
+
+    providerLoadPromise = (async () => {
+      await get().refresh();
+
+      const seeded = await seedBuiltinProviders(get().providers, api.createProvider);
+      if (seeded) await get().refresh();
+    })().finally(() => {
+      providerLoadPromise = null;
+    });
+
+    await providerLoadPromise;
   },
 
   refresh: async () => {

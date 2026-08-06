@@ -1,3 +1,4 @@
+using Sol.Domain.Ai;
 using Sol.Domain.Identity;
 
 namespace Sol.Application.Abstractions.Persistence;
@@ -11,7 +12,8 @@ public sealed record CanvasAsset(
     string StoragePath,
     long ByteSize,
     string? Prompt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid? GroupId = null);
 
 public interface ICanvasAssetRepository
 {
@@ -42,4 +44,31 @@ public interface ICanvasAssetRepository
     /// Null when the asset does not exist or belongs to another device.
     /// </summary>
     Task<string?> DeleteAsync(DeviceId deviceId, Guid assetId, CancellationToken ct);
+
+    /// <summary>Lists the device's asset groups with the number of assigned assets.</summary>
+    Task<IReadOnlyList<CanvasAssetGroup>> ListGroupsAsync(DeviceId deviceId, CancellationToken ct);
+
+    /// <summary>Loads one group when it belongs to the device.</summary>
+    Task<CanvasAssetGroup?> FindGroupAsync(DeviceId deviceId, Guid groupId, CancellationToken ct);
+
+    /// <summary>Creates a group, returning null when its name already exists.</summary>
+    Task<CanvasAssetGroup?> InsertGroupAsync(CanvasAssetGroup group, CancellationToken ct);
+
+    /// <summary>Renames a group, returning null when it disappeared or the name is taken.</summary>
+    Task<CanvasAssetGroup?> RenameGroupAsync(
+        DeviceId deviceId,
+        Guid groupId,
+        string name,
+        DateTimeOffset updatedAt,
+        CancellationToken ct);
+
+    /// <summary>Deletes a group. The foreign key leaves its assets ungrouped.</summary>
+    Task<bool> DeleteGroupAsync(DeviceId deviceId, Guid groupId, CancellationToken ct);
+
+    /// <summary>Assigns or unassigns a batch of assets owned by the device.</summary>
+    Task<int> AssignGroupAsync(
+        DeviceId deviceId,
+        IReadOnlyList<Guid> assetIds,
+        Guid? groupId,
+        CancellationToken ct);
 }

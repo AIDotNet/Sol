@@ -72,6 +72,12 @@ namespace Sol.Api.Serialization;
 [JsonSerializable(typeof(GenerateTextResponse))]
 [JsonSerializable(typeof(CanvasAssetSummary))]
 [JsonSerializable(typeof(CanvasAssetListResponse))]
+[JsonSerializable(typeof(CanvasAssetGroupSummary))]
+[JsonSerializable(typeof(CanvasAssetGroupListResponse))]
+[JsonSerializable(typeof(CreateCanvasAssetGroupRequest))]
+[JsonSerializable(typeof(UpdateCanvasAssetGroupRequest))]
+[JsonSerializable(typeof(AssignCanvasAssetsRequest))]
+[JsonSerializable(typeof(AssignCanvasAssetsResponse))]
 // Canvas documents. The graph itself is a JsonNode passed through verbatim.
 [JsonSerializable(typeof(CanvasResponse))]
 [JsonSerializable(typeof(CanvasSummaryResponse))]

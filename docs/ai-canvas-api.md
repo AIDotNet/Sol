@@ -30,6 +30,48 @@ DELETE /api/v1/ai/models/{modelId}
 POST   /api/v1/ai/config/import                  URL 快速配置落库
 ```
 
+### URL 渠道快速配置
+
+页面入口支持在 hash 中携带配置：
+
+```text
+/#settings=base64url:<UTF-8 JSON 的 Base64URL 编码>
+```
+
+规范载荷是一个 `providers` 数组，可同时配置多个渠道。内置渠道只需要 `builtinId` 和
+`apiKey`；前端会从内置预设补全名称、协议、Base URL、预设版本和默认模型：
+
+```json
+{
+  "providers": [
+    { "builtinId": "openai", "apiKey": "sk-example" }
+  ]
+}
+```
+
+自定义渠道需要 `name`、`type` 和 `baseUrl`，`apiKey` 与 `models` 可省略。省略模型不会触发
+服务端网络请求，渠道会保留为空，之后可在设置页手动添加或拉取：
+
+```json
+{
+  "providers": [
+    {
+      "name": "My Relay",
+      "type": "openai-chat",
+      "baseUrl": "https://relay.example.com/v1",
+      "apiKey": "key-example",
+      "models": [
+        { "id": "my-model", "name": "My Model", "category": "chat" }
+      ]
+    }
+  ]
+}
+```
+
+`autoApply: true` 只对不携带 `apiKey` 的链接生效。任何带 Key 的链接都必须经过确认，预览
+会显示脱敏 Key，且参数会在页面加载后从地址栏移除。`?settings=`、原始 JSON 和旧的
+`base64:` 格式仍兼容，但新生成的链接应使用 hash + `base64url:`，避免 Key 进入请求日志。
+
 ### 生成
 
 ```
