@@ -98,6 +98,23 @@ public class OpenAiImagesRequestTests
     }
 
     [Fact]
+    public void AnInpaintMaskUsesTheDedicatedPngPart()
+    {
+        using var message = OpenAiImagesClient.BuildEditRequest(
+            BaseUrl,
+            Request(withReference: true, withMask: true));
+
+        var files = Assert.IsType<MultipartFormDataContent>(message.Content)
+            .Where(part => part.Headers.ContentDisposition?.FileName is not null)
+            .ToList();
+
+        Assert.Equal(2, files.Count);
+        var mask = Assert.Single(files, part => part.Headers.ContentDisposition?.Name == "mask");
+        Assert.Equal("mask.png", mask.Headers.ContentDisposition?.FileName);
+        Assert.Equal("image/png", mask.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public void TheTwoShapesTargetDifferentEndpoints()
     {
         using var generate = OpenAiImagesClient.BuildGenerateRequest(BaseUrl, Request());
@@ -141,12 +158,14 @@ public class OpenAiImagesRequestTests
         string? quality = null,
         string? outputFormat = null,
         string? responseFormat = null,
-        bool withReference = false) => new(
+        bool withReference = false,
+        bool withMask = false) => new(
             Provider(),
             ApiKey: "sk-test",
             ModelKey: "gpt-image-1",
             Prompt: "a cat",
             withReference ? [new ReferenceImage([1, 2, 3], "image/png")] : [],
+            Mask: withMask ? new ReferenceImage([4, 5, 6], "image/png") : null,
             Size: "1024x1024",
             quality,
             outputFormat,

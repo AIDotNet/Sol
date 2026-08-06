@@ -1,3 +1,4 @@
+import type { McpTransport } from "@/features/ai/api";
 import type { ProviderType } from "@/features/ai/types";
 
 /**
@@ -43,4 +44,8 @@ export function isProtocolReady(protocol: ProviderType): boolean {
  * its tools. Kept here rather than inline so the MCP panel's banner disappears from one place
  * once a client exists.
  */
-export const MCP_RUNTIME_SUPPORTED = false;
+export const MCP_RUNTIME_SUPPORTED = true;
+
+export function isMcpRuntimeSupported(transport: McpTransport): boolean {
+  return transport === "streamable-http" || transport === "sse";
+}

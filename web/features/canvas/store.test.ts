@@ -19,6 +19,71 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("node drag persistence revisions", () => {
+  it("applies live positions without marking them persistable", () => {
+    const id = useCanvasStore.getState().addNode("text", { x: 0, y: 0 });
+    const revision = useCanvasStore.getState().revision;
+
+    useCanvasStore.getState().onNodesChange([
+      { id, type: "position", position: { x: 40, y: 24 }, dragging: true },
+    ]);
+    useCanvasStore.getState().onNodesChange([
+      { id, type: "position", position: { x: 80, y: 48 }, dragging: true },
+    ]);
+
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === id)?.position).toEqual({
+      x: 80,
+      y: 48,
+    });
+    expect(useCanvasStore.getState().revision).toBe(revision);
+  });
+
+  it("marks only the released position persistable", () => {
+    const id = useCanvasStore.getState().addNode("text", { x: 0, y: 0 });
+    const revision = useCanvasStore.getState().revision;
+
+    useCanvasStore.getState().onNodesChange([
+      { id, type: "position", position: { x: 40, y: 24 }, dragging: true },
+    ]);
+    useCanvasStore.getState().onNodesChange([
+      { id, type: "position", position: { x: 80, y: 48 }, dragging: false },
+    ]);
+
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === id)?.position).toEqual({
+      x: 80,
+      y: 48,
+    });
+    expect(useCanvasStore.getState().revision).toBe(revision + 1);
+  });
+
+  it("persists a multi-node release as one revision", () => {
+    const first = useCanvasStore.getState().addNode("text", { x: 0, y: 0 });
+    const second = useCanvasStore.getState().addNode("text", { x: 10, y: 10 });
+    const revision = useCanvasStore.getState().revision;
+
+    useCanvasStore.getState().onNodesChange([
+      { id: first, type: "position", position: { x: 100, y: 50 }, dragging: false },
+      { id: second, type: "position", position: { x: 140, y: 90 }, dragging: false },
+    ]);
+
+    const nodes = useCanvasStore.getState().nodes;
+    expect(nodes.find((node) => node.id === first)?.position).toEqual({ x: 100, y: 50 });
+    expect(nodes.find((node) => node.id === second)?.position).toEqual({ x: 140, y: 90 });
+    expect(useCanvasStore.getState().revision).toBe(revision + 1);
+  });
+
+  it("keeps non-drag position changes persistable", () => {
+    const id = useCanvasStore.getState().addNode("text", { x: 0, y: 0 });
+    const revision = useCanvasStore.getState().revision;
+
+    useCanvasStore.getState().onNodesChange([
+      { id, type: "position", position: { x: 20, y: 30 } },
+    ]);
+
+    expect(useCanvasStore.getState().revision).toBe(revision + 1);
+  });
+});
+
 describe("undo history for node edits", () => {
   it("restores the text a burst of typing replaced", () => {
     // Regression: `updateNodeData` recorded no history at all, so Ctrl+Z skipped past the typing

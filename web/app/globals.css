@@ -193,6 +193,53 @@
   }
 }
 
+@keyframes agent-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes agent-tool-in {
+  from {
+    opacity: 0;
+    transform: translateX(-0.375rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes agent-thinking-breathe {
+  0%,
+  100% {
+    border-color: color-mix(in oklab, var(--border) 75%, transparent);
+    background-color: color-mix(in oklab, var(--muted) 25%, transparent);
+  }
+  50% {
+    border-color: color-mix(in oklab, var(--primary) 35%, var(--border));
+    background-color: color-mix(in oklab, var(--primary) 7%, transparent);
+  }
+}
+
+@keyframes agent-thinking-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @layer components {
   /*
    * Floating chrome over the canvas: the project pill, the two toolbars, the context menu.
@@ -275,6 +322,22 @@
     );
     animation: canvas-sweep 1.6s ease-in-out infinite;
   }
+
+  .agent-message-enter {
+    animation: agent-message-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .agent-tool-enter {
+    animation: agent-tool-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .agent-thinking-live {
+    animation: agent-thinking-breathe 2.4s ease-in-out infinite;
+  }
+
+  .agent-thinking-dot {
+    animation: agent-thinking-dot 1.4s ease-in-out infinite;
+  }
 }
 
 /*
@@ -289,6 +352,13 @@
   .canvas-node,
   .canvas-node-busy::after,
   .canvas-sweep::after {
+    animation: none;
+  }
+
+  .agent-message-enter,
+  .agent-tool-enter,
+  .agent-thinking-live,
+  .agent-thinking-dot {
     animation: none;
   }
 }

@@ -27,8 +27,13 @@
 ## 启动
 
 ```bash
-docker compose up -d
-docker compose ps          # 三个服务都应为 (healthy)
+docker compose up -d --build
+docker compose ps          # Postgres / Redis / RabbitMQ healthy；skill-runner running
+
+# runner 通过 Docker-managed volume 内的 Unix socket 提供隔离脚本执行。
+# 宿主直接运行 Sol.Api 时看不到 Docker Desktop VM 内的 socket，因此 prose Skills
+# 正常可用，run_skill_script 自动隐藏；容器化部署时 API 与 runner 共享该 volume。
+docker compose ps skill-runner
 
 dotnet run --project src/Sol.Api
 # 开发环境 RunMigrationsOnStartup=true，会自动建表

@@ -1,0 +1,6 @@
+*
+!Dockerfile
+!runner.py
+!healthcheck.py
+!integration_test.py
+!chroot_exec.py

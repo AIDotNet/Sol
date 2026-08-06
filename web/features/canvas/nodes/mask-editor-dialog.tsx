@@ -127,7 +127,11 @@ export function MaskEditorDialog({
       const mask = await buildInpaintMask(sourceUrl, strokes);
       const asset = await uploadAsset(toUploadFile(mask, "masked"));
 
-      spawnOutput(nodeId, "image", { assetUrl: asset.url, mediaType: asset.mediaType });
+      spawnOutput(nodeId, "image", {
+        assetUrl: asset.url,
+        mediaType: asset.mediaType,
+        role: "inpaint-mask",
+      });
       onOpenChange(false);
     } catch (maskError) {
       setError(maskError instanceof Error ? maskError.message : t("errors.unknown"));

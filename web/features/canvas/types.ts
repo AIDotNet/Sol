@@ -53,6 +53,8 @@ export interface ImageNodeData {
   prompt?: string;
   providerId?: string;
   modelId?: string;
+  /** Marks this asset as an inpaint mask rather than an ordinary reference image. */
+  role?: "reference" | "inpaint-mask";
   execution?: NodeExecution;
 }
 
@@ -111,9 +113,15 @@ export interface VideoGenNodeData {
   watermark?: boolean;
   generateAudio?: boolean;
   cameraFixed?: boolean;
+  /** Seedance only: keep connected media as references, or map up to two images to first/last frames. */
+  seedanceInputMode?: SeedanceVideoInputMode;
   /** As on `ImageGenNodeData`: only a failure that never reached a node of its own. */
   execution?: NodeExecution;
 }
+
+export type SeedanceVideoInputMode = "reference" | "first-last";
+
+export const DEFAULT_SEEDANCE_INPUT_MODE: SeedanceVideoInputMode = "reference";
 
 export type CanvasNodeData =
   | TextNodeData
@@ -152,6 +160,24 @@ export const IMAGE_RESPONSE_FORMATS: readonly ImageResponseFormat[] = ["url", "b
 export const DEFAULT_IMAGE_OUTPUT_FORMAT: ImageOutputFormat = "png";
 
 export const DEFAULT_IMAGE_RESPONSE_FORMAT: ImageResponseFormat = "url";
+
+export const VIDEO_DURATION_MIN = 1;
+export const VIDEO_DURATION_MAX = 60;
+export const DEFAULT_VIDEO_DURATION = 5;
+
+export function isValidVideoDuration(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= VIDEO_DURATION_MIN &&
+    value <= VIDEO_DURATION_MAX
+  );
+}
+
+export function resolveVideoDuration(value: number | undefined): number | null {
+  const duration = value ?? DEFAULT_VIDEO_DURATION;
+  return isValidVideoDuration(duration) ? duration : null;
+}
 
 /**
  * Maps an aspect ratio to the pixel size OpenAI's image API accepts.

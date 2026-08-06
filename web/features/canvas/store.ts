@@ -188,8 +188,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => {
 
       set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) }));
 
-      // Selection is transient UI state, not something worth persisting or undoing.
-      if (changes.some((change) => change.type !== "select")) {
+      // Selection is transient UI state, and live drag frames only move the rendered node. The
+      // final position event (dragging === false) marks the gesture persistable as one revision.
+      if (
+        changes.some(
+          (change) =>
+            change.type !== "select" &&
+            !(change.type === "position" && change.dragging === true),
+        )
+      ) {
         bump();
       }
     },

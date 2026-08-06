@@ -40,6 +40,31 @@ public sealed class RabbitMqOptions
     public string[] RoutingKeys { get; set; } = ["device.#"];
 }
 
+public sealed class SkillsOptions
+{
+    public const string SectionName = "Skills";
+
+    public string Root { get; set; } = "./storage/skills";
+    public int MaxUploadBytes { get; set; } = 25 * 1024 * 1024;
+    public int MaxExtractedBytes { get; set; } = 100 * 1024 * 1024;
+    public int MaxEntries { get; set; } = 1_000;
+    public string RunnerSocketPath { get; set; } = "./storage/runner/runner.sock";
+    public int RunnerTimeoutSeconds { get; set; } = 30;
+    public int RunnerMaxOutputBytes { get; set; } = 256 * 1024;
+    public int RunnerMaxPackageBytes { get; set; } = 25 * 1024 * 1024;
+}
+
+public sealed class McpOptions
+{
+    public const string SectionName = "Mcp";
+
+    /// <summary>Allows plain HTTP only when every resolved address is loopback.</summary>
+    public bool AllowLoopbackHttp { get; set; }
+
+    public int RequestTimeoutSeconds { get; set; } = 30;
+    public int MaxResponseBytes { get; set; } = 1_048_576;
+}
+
 public sealed class AiOptions
 {
     public const string SectionName = "Ai";

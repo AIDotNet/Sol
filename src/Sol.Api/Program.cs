@@ -8,6 +8,8 @@ using Sol.Api.Hubs;
 using Sol.Api.Middleware;
 using Sol.Api.Realtime;
 using Sol.Api.Serialization;
+using Sol.Application.Abstractions.Ai;
+using Sol.Application.Abstractions.Persistence;
 using Sol.Application.Abstractions.Realtime;
 using Sol.Application.Contracts.Device;
 using Sol.Application.Features.Identity;
@@ -28,7 +30,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddSingleton<IRealtimeNotifier, SignalRNotifier>();
+builder.Services.AddSingleton<SignalRNotifier>();
+builder.Services.AddSingleton<IRealtimeNotifier>(sp => sp.GetRequiredService<SignalRNotifier>());
+builder.Services.AddSingleton<IAgentRealtimeSink>(sp => sp.GetRequiredService<SignalRNotifier>());
 
 var signalR = builder.Services.AddSignalR();
 
@@ -83,6 +87,8 @@ app.MapAiGenerationEndpoints();
 app.MapAiVideoEndpoints();
 app.MapCanvasEndpoints();
 app.MapMcpEndpoints();
+app.MapSkillEndpoints();
+app.MapAgentEndpoints();
 app.MapHub<SolHub>("/hubs/sol");
 
 app.Run();
@@ -119,6 +125,15 @@ static void VerifyAotRegistrations(IServiceProvider services)
 {
     using var scope = services.CreateScope();
     _ = scope.ServiceProvider.GetRequiredService<IValidator<DeviceSignalsPayload>>();
+    _ = scope.ServiceProvider.GetRequiredService<IAgentModelDispatcher>();
+    _ = scope.ServiceProvider.GetRequiredService<IMcpRuntime>();
+    _ = scope.ServiceProvider.GetRequiredService<IAgentRunControl>();
+    _ = scope.ServiceProvider.GetRequiredService<IAgentRealtimeSink>();
+    _ = scope.ServiceProvider.GetRequiredService<IAgentCanvasBridge>();
+    _ = scope.ServiceProvider.GetRequiredService<ISkillPackageScanner>();
+    _ = scope.ServiceProvider.GetRequiredService<ISkillStore>();
+    _ = scope.ServiceProvider.GetRequiredService<ISkillScriptRunner>();
+    _ = scope.ServiceProvider.GetRequiredService<ISkillRepository>();
 }
 
 /// <summary>Exposed so integration tests can drive the host.</summary>

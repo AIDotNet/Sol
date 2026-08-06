@@ -73,6 +73,25 @@ describe("collectUpstream", () => {
     expect(result.images).toEqual([{ url: "/asset/a", mediaType: "image/png" }]);
   });
 
+  it("separates an inpaint mask from ordinary reference images", () => {
+    const nodes = [
+      node("source", "image", { assetUrl: "/asset/source", mediaType: "image/png" }),
+      node("mask", "image", {
+        assetUrl: "/asset/mask",
+        mediaType: "image/png",
+        role: "inpaint-mask",
+      }),
+      node("g1", "imageGen"),
+    ];
+    const result = collectUpstream("g1", nodes, [
+      edge("source", "g1"),
+      edge("mask", "g1"),
+    ]);
+
+    expect(result.images).toEqual([{ url: "/asset/source", mediaType: "image/png" }]);
+    expect(result.maskUrl).toBe("/asset/mask");
+  });
+
   it("falls back to a pending image's prompt when it has no asset yet", () => {
     const nodes = [
       node("i1", "image", { prompt: "a previous description" }),
@@ -122,7 +141,7 @@ describe("collectUpstream", () => {
 
   it("returns empty inputs for an unconnected node", () => {
     const result = collectUpstream("g1", [node("g1", "imageGen")], []);
-    expect(result).toEqual({ prompt: "", images: [] });
+    expect(result).toEqual({ prompt: "", images: [], maskUrl: undefined });
   });
 });
 

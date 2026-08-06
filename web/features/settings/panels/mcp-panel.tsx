@@ -1,6 +1,6 @@
 "use client";
 
-import { FileJson, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, FileJson, Loader2, Plus, Trash2, TriangleAlert, XCircle } from "lucide-react";
 import { useState } from "react";
 import { useT } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import type { CreateMcpServerInput, McpServer, McpTransport } from "@/features/ai/api";
-import { MCP_RUNTIME_SUPPORTED } from "@/features/ai/protocol-support";
+import { checkMcpServer, type CreateMcpServerInput, type McpServer, type McpTransport } from "@/features/ai/api";
+import { isMcpRuntimeSupported } from "@/features/ai/protocol-support";
 import { useAiStore } from "@/features/ai/store";
 import { parseMcpConfig } from "@/features/settings/mcp-import";
 import {
@@ -50,20 +50,6 @@ export function McpPanel() {
 
   return (
     <>
-      {/* Stated up front rather than discovered later: the config here is stored faithfully but
-          nothing connects to a server yet. */}
-      {!MCP_RUNTIME_SUPPORTED && (
-        <div className="flex items-start gap-2 border-b border-amber-500/30 bg-amber-500/5 px-5 py-2.5">
-          <TriangleAlert
-            className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-500"
-            aria-hidden
-          />
-          <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
-            {t("mcp.runtimeNotSupported")}
-          </p>
-        </div>
-      )}
-
       <MasterDetail
         list={
           <>
@@ -138,6 +124,28 @@ function McpDetail({ server }: { server: McpServer }) {
 
   const isStdio = server.transport === "stdio";
   const [deleting, setDeleting] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<{
+    ok: boolean;
+    error: string | null;
+    toolCount: number;
+  } | null>(null);
+
+  async function check() {
+    setChecking(true);
+    setCheckResult(null);
+    try {
+      setCheckResult(await checkMcpServer(server.id));
+    } catch (error) {
+      setCheckResult({
+        ok: false,
+        error: error instanceof Error ? error.message : t("errors.unknown"),
+        toolCount: 0,
+      });
+    } finally {
+      setChecking(false);
+    }
+  }
 
   return (
     <>
@@ -148,6 +156,16 @@ function McpDetail({ server }: { server: McpServer }) {
             {TRANSPORT_LABELS[server.transport]}
           </p>
         </div>
+
+        <Button
+          size="sm"
+          variant="outline"
+          isDisabled={checking || !isMcpRuntimeSupported(server.transport)}
+          onPress={() => void check()}
+        >
+          {checking ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
+          {t("mcp.check")}
+        </Button>
 
         <Switch
           isSelected={server.enabled}
@@ -166,6 +184,35 @@ function McpDetail({ server }: { server: McpServer }) {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+        {!isMcpRuntimeSupported(server.transport) && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+            <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" aria-hidden />
+            <p className="text-xs text-muted-foreground">{t("mcp.runtimeNotSupported")}</p>
+          </div>
+        )}
+
+        {checkResult && (
+          <div
+            className={cn(
+              "flex items-start gap-2 rounded-lg border p-3 text-xs",
+              checkResult.ok
+                ? "border-emerald-500/30 bg-emerald-500/5"
+                : "border-destructive/30 bg-destructive/5",
+            )}
+          >
+            {checkResult.ok ? (
+              <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" aria-hidden />
+            ) : (
+              <XCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden />
+            )}
+            <p className="min-w-0 break-words text-muted-foreground">
+              {checkResult.ok
+                ? t("mcp.checkSuccess", { count: checkResult.toolCount })
+                : (checkResult.error ?? t("mcp.checkFailed"))}
+            </p>
+          </div>
+        )}
+
         <FormField label={t("mcp.transport")}>
           <Select
             selectedKey={server.transport}
@@ -243,7 +290,7 @@ function McpDetail({ server }: { server: McpServer }) {
               {server.env.map((entry) => (
                 <div key={entry.key} className="flex gap-2 px-2.5 py-1.5 font-mono">
                   <span className="text-muted-foreground">{entry.key}</span>
-                  <span className="truncate">{entry.value}</span>
+                  <span className="truncate">{entry.hint}</span>
                 </div>
               ))}
             </div>

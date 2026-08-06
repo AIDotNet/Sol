@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, Cpu, Plug, Settings2, SlidersHorizontal } from "lucide-react";
+import { Boxes, Cpu, Plug, Settings2, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { useT } from "@/components/providers/i18n-provider";
@@ -11,9 +11,10 @@ import { McpPanel } from "@/features/settings/panels/mcp-panel";
 import { ModelConfigPanel } from "@/features/settings/panels/model-config-panel";
 import { ModelPanel } from "@/features/settings/panels/model-panel";
 import { ProviderPanel } from "@/features/settings/panels/provider-panel";
+import { SkillsPanel } from "@/features/settings/panels/skills-panel";
 import { cn } from "@/lib/utils";
 
-export type SettingsTab = "general" | "providers" | "models" | "modelConfig" | "mcp";
+export type SettingsTab = "general" | "providers" | "models" | "modelConfig" | "mcp" | "skills";
 
 const NAV_GROUPS: ReadonlyArray<{
   labelKey: "settings.navGroups.basic" | "settings.navGroups.ai" | "settings.navGroups.extensions";
@@ -24,7 +25,8 @@ const NAV_GROUPS: ReadonlyArray<{
       | "settings.nav.providers"
       | "settings.nav.models"
       | "settings.nav.modelConfig"
-      | "settings.nav.mcp";
+      | "settings.nav.mcp"
+      | "settings.nav.skills";
     icon: typeof Settings2;
   }>;
 }> = [
@@ -42,7 +44,10 @@ const NAV_GROUPS: ReadonlyArray<{
   },
   {
     labelKey: "settings.navGroups.extensions",
-    items: [{ id: "mcp", labelKey: "settings.nav.mcp", icon: Plug }],
+    items: [
+      { id: "mcp", labelKey: "settings.nav.mcp", icon: Plug },
+      { id: "skills", labelKey: "settings.nav.skills", icon: Sparkles },
+    ],
   },
 ];
 
@@ -130,6 +135,7 @@ export function SettingsDialog({
           {tab === "models" && <ModelPanel />}
           {tab === "modelConfig" && <ModelConfigPanel />}
           {tab === "mcp" && <McpPanel />}
+          {tab === "skills" && <SkillsPanel />}
         </div>
       </div>
     </Dialog>

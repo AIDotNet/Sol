@@ -19,6 +19,8 @@ export interface UpstreamInputs {
   prompt: string;
   /** Reference images, nearest first. */
   images: Array<{ url: string; mediaType?: string }>;
+  /** Dedicated PNG inpaint mask, when one marked image is upstream. */
+  maskUrl?: string;
 }
 
 const GENERATION_KINDS = new Set<NodeKind>(["imageGen", "videoGen"]);
@@ -49,6 +51,7 @@ export function collectUpstream(
 
   const texts: string[] = [];
   const images: Array<{ url: string; mediaType?: string }> = [];
+  let maskUrl: string | undefined;
   const visited = new Set<string>([nodeId]);
 
   // Iterative rather than recursive: a long chain would otherwise risk a stack overflow, and
@@ -72,7 +75,9 @@ export function collectUpstream(
       if (text) texts.push(text);
     } else if (kind === "image" || kind === "video") {
       const data = node.data as ImageNodeData;
-      if (data.assetUrl) {
+      if (data.assetUrl && data.role === "inpaint-mask") {
+        maskUrl ??= data.assetUrl;
+      } else if (data.assetUrl) {
         images.push({ url: data.assetUrl, mediaType: data.mediaType });
       }
       // An image with no text of its own contributes the prompt that produced it, so feeding a
@@ -89,7 +94,7 @@ export function collectUpstream(
     }
   }
 
-  return { prompt: texts.join("\n\n"), images };
+  return { prompt: texts.join("\n\n"), images, maskUrl };
 }
 
 /**

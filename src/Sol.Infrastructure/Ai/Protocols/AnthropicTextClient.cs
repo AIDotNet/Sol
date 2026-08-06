@@ -31,8 +31,9 @@ internal sealed class AnthropicTextClient(
         TextGenerationRequest request,
         CancellationToken ct)
     {
-        // Base URLs are normalized to drop a trailing /v1, so it is re-added here.
-        var baseUrl = request.Provider.BaseUrl.TrimEnd('/');
+        // The provider may be declared as OpenAI-compatible while this model overrides the
+        // protocol to Anthropic. Normalize for the resolved protocol before adding /v1/messages.
+        var baseUrl = AiProvider.NormalizeBaseUrl(request.Provider.BaseUrl, ProviderType.Anthropic);
 
         var parts = new JsonArray();
         foreach (var image in request.ReferenceImages)

@@ -21,6 +21,9 @@ namespace Sol.Api.Endpoints;
 public static class AiVideoEndpoints
 {
     private const int MaxReferenceImages = 4;
+    private const int MinDurationSeconds = 1;
+    private const int MaxDurationSeconds = 60;
+    private const int DefaultDurationSeconds = 5;
 
     public static IEndpointRouteBuilder MapAiVideoEndpoints(this IEndpointRouteBuilder app)
     {
@@ -107,6 +110,13 @@ public static class AiVideoEndpoints
             return Invalid("a prompt or at least one reference image is required");
         }
 
+        var duration = request.Duration ?? DefaultDurationSeconds;
+        if (duration is < MinDurationSeconds or > MaxDurationSeconds)
+        {
+            return Invalid(
+                $"duration must be between {MinDurationSeconds} and {MaxDurationSeconds} seconds");
+        }
+
         var provider = await providers.FindAsync(deviceId, providerId, ct);
         if (provider is null)
         {
@@ -159,6 +169,18 @@ public static class AiVideoEndpoints
         }
 
         var protocol = provider.ResolveProtocol(model);
+        var inputMode = request.InputMode?.Trim().ToLowerInvariant();
+        if (inputMode is not (null or "reference" or "first-last"))
+        {
+            return Invalid("inputMode must be 'reference' or 'first-last'");
+        }
+
+        if (protocol == ProviderType.SeedanceVideo
+            && inputMode == "first-last"
+            && references.Count > 2)
+        {
+            return Invalid("first-last mode accepts at most two connected images");
+        }
 
         var submit = await dispatcher.SubmitAsync(
             protocol,
@@ -168,9 +190,10 @@ public static class AiVideoEndpoints
                 request.ModelKey,
                 request.Prompt,
                 references,
+                inputMode ?? "reference",
                 request.Aspect,
                 request.Resolution,
-                request.Duration,
+                duration,
                 request.Fps,
                 request.Seed,
                 request.Watermark,
@@ -190,9 +213,10 @@ public static class AiVideoEndpoints
         var requestJson = new JsonObject
         {
             ["prompt"] = request.Prompt,
+            ["inputMode"] = inputMode ?? "reference",
             ["aspect"] = request.Aspect,
             ["resolution"] = request.Resolution,
-            ["duration"] = request.Duration,
+            ["duration"] = duration,
         }.ToJsonString();
 
         await jobs.InsertAsync(

@@ -14,6 +14,11 @@ public sealed record GenerateImageRequest(
     string ModelKey,
     string Prompt,
     string[]? Images,
+    /// <summary>
+    /// A stored PNG mask for inpainting. Transparent pixels are replaced by the provider; the URL
+    /// is resolved through the same device-owned asset path as reference images.
+    /// </summary>
+    string? MaskUrl,
     string? Size,
     string? Quality,
     string? OutputFormat,
@@ -30,6 +35,7 @@ public sealed record StartVideoRequest(
     string ModelKey,
     string Prompt,
     string[]? Images,
+    string? InputMode,
     string? Aspect,
     string? Resolution,
     int? Duration,

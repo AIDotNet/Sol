@@ -12,7 +12,7 @@ vi.mock("@/features/ai/store", () => ({
 }));
 
 const { useCanvasStore } = await import("@/features/canvas/store");
-const { cancelRun, retryRun, runImageNode } = await import("@/features/canvas/execution");
+const { cancelRun, retryRun, runImageNode, runVideoNode } = await import("@/features/canvas/execution");
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -276,6 +276,28 @@ describe("the image request body", () => {
     });
   }
 
+  it("sends a marked inpaint mask separately from reference images", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(assets("/one")));
+    vi.stubGlobal("fetch", fetchMock);
+    useCanvasStore.getState().load({
+      nodes: [
+        node("t", "text", { text: "repair the painted area" }),
+        node("source", "image", { assetUrl: "/source.png" }),
+        node("mask", "image", { assetUrl: "/mask.png", role: "inpaint-mask" }),
+        node("g", "imageGen", { providerId: "p1", modelId: "m1" }),
+      ],
+      edges: [edge("t", "g"), edge("source", "g"), edge("mask", "g")],
+    });
+
+    await run("g");
+
+    expect(bodyOf(fetchMock)).toMatchObject({
+      maskUrl: "/mask.png",
+      images: ["/source.png"],
+    });
+    expect(bodyOf(fetchMock).images).not.toContain("/mask.png");
+  });
+
   it("asks for a URL and a PNG when the node has been left alone", async () => {
     // These mirror the server's own fallbacks. A node that has never had the chips touched must
     // still send them, because the chips show those values as selected.
@@ -300,6 +322,81 @@ describe("the image request body", () => {
       responseFormat: "base64",
       quality: "high",
     });
+  });
+});
+
+describe("the video duration request", () => {
+  function graph(duration?: number, seedanceInputMode?: string) {
+    useCanvasStore.getState().load({
+      nodes: [
+        node("t", "text", { text: "a cat" }),
+        node("g", "videoGen", {
+          providerId: "p1",
+          modelId: "m1",
+          duration,
+          seedanceInputMode,
+        }),
+      ],
+      edges: [edge("t", "g")],
+    });
+  }
+
+  function videoNodes() {
+    return useCanvasStore.getState().nodes.filter((candidate) => candidate.type === "video");
+  }
+
+  function postedBody(fetchMock: ReturnType<typeof vi.fn>) {
+    const call = fetchMock.mock.calls.find(([url]) => url === "/api/v1/ai/videos");
+    return JSON.parse((call?.[1] as { body: string }).body);
+  }
+
+  async function startAndCancel(fetchMock: ReturnType<typeof vi.fn>) {
+    const { nodes, edges } = useCanvasStore.getState();
+    const running = runVideoNode("g", nodes, edges);
+
+    const [output] = videoNodes();
+    cancelRun(output.id);
+    await running;
+
+    return postedBody(fetchMock);
+  }
+
+  it("sends the five-second default when duration is absent", async () => {
+    const fetchMock = abortableFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    graph();
+
+    expect((await startAndCancel(fetchMock)).duration).toBe(5);
+  });
+
+  it("sends an arbitrary whole number in range", async () => {
+    const fetchMock = abortableFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    graph(37);
+
+    expect((await startAndCancel(fetchMock)).duration).toBe(37);
+  });
+
+  it("defaults to reference media and sends the selected first/last mode", async () => {
+    const fetchMock = abortableFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    graph(5, "first-last");
+
+    expect((await startAndCancel(fetchMock)).inputMode).toBe("first-last");
+  });
+
+  it.each([0, 61, 3.5])("rejects invalid stored duration %s before calling the API", async (duration) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    graph(duration);
+
+    const { nodes, edges } = useCanvasStore.getState();
+    await runVideoNode("g", nodes, edges);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(videoNodes()).toHaveLength(0);
+    expect(executionOf("g")?.status).toBe("failed");
+    expect(executionOf("g")?.error).toContain("1 to 60");
   });
 });
 

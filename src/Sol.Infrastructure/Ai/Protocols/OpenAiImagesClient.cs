@@ -161,6 +161,16 @@ internal sealed class OpenAiImagesClient(
             content.Add(part, "image[]", $"reference-{i}{ExtensionFor(reference.MediaType)}");
         }
 
+        if (request.Mask is { } mask)
+        {
+            var part = new ByteArrayContent(mask.Bytes);
+            part.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+
+            // OpenAI's edit protocol gives the mask its own field. Treating it as another image
+            // silently turns an inpaint into a whole-image variation.
+            content.Add(part, "mask", "mask.png");
+        }
+
         return new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/images/edits")
         {
             Content = content,

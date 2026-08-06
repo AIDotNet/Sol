@@ -1,7 +1,9 @@
 using System.Text.Json.Serialization;
+using Sol.Application.Contracts.Agent;
 using Sol.Application.Contracts.Ai;
 using Sol.Application.Contracts.Device;
 using Sol.Application.Contracts.Realtime;
+using Sol.Application.Contracts.Skill;
 using Sol.Api.Endpoints;
 
 namespace Sol.Api.Serialization;
@@ -51,10 +53,14 @@ namespace Sol.Api.Serialization;
 [JsonSerializable(typeof(McpServerListResponse))]
 [JsonSerializable(typeof(McpServerResponse))]
 [JsonSerializable(typeof(McpEnvEntry))]
+[JsonSerializable(typeof(McpSecretEntry))]
 [JsonSerializable(typeof(CreateMcpServerRequest))]
 [JsonSerializable(typeof(UpdateMcpServerRequest))]
 [JsonSerializable(typeof(ImportMcpServersRequest))]
 [JsonSerializable(typeof(ImportMcpServersResponse))]
+[JsonSerializable(typeof(McpServerCheckResponse))]
+[JsonSerializable(typeof(McpToolResponse))]
+[JsonSerializable(typeof(McpToolListResponse))]
 // Generation.
 [JsonSerializable(typeof(GenerateImageRequest))]
 [JsonSerializable(typeof(GenerateImageResponse))]
@@ -72,6 +78,26 @@ namespace Sol.Api.Serialization;
 [JsonSerializable(typeof(CanvasListResponse))]
 [JsonSerializable(typeof(CreateCanvasRequest))]
 [JsonSerializable(typeof(UpdateCanvasRequest))]
+// Durable canvas Agent.
+[JsonSerializable(typeof(CreateAgentSessionRequest))]
+[JsonSerializable(typeof(AgentSessionResponse))]
+[JsonSerializable(typeof(AgentSessionListResponse))]
+[JsonSerializable(typeof(CreateAgentRunRequest))]
+[JsonSerializable(typeof(AgentRunResponse))]
+[JsonSerializable(typeof(AgentMessageResponse))]
+[JsonSerializable(typeof(AgentMessageListResponse))]
+[JsonSerializable(typeof(AgentEventResponse))]
+[JsonSerializable(typeof(AgentEventListResponse))]
+[JsonSerializable(typeof(AgentEventEnvelope))]
+[JsonSerializable(typeof(AgentToolCallEnvelope))]
+[JsonSerializable(typeof(AgentApprovalEnvelope))]
+[JsonSerializable(typeof(AgentToolCatalogEntryResponse))]
+[JsonSerializable(typeof(AgentToolCatalogResponse))]
+// Uploaded Agent Skills.
+[JsonSerializable(typeof(SkillRiskFindingResponse))]
+[JsonSerializable(typeof(SkillScanResponse))]
+[JsonSerializable(typeof(SkillResponse))]
+[JsonSerializable(typeof(SkillListResponse))]
 [JsonSerializable(typeof(System.Text.Json.Nodes.JsonNode))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(bool))]

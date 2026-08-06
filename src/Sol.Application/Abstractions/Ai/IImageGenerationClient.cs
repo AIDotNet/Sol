@@ -24,6 +24,11 @@ public interface IImageGenerationClient
 /// Existing images to condition on. Passed as raw bytes rather than URLs: the upstream cannot
 /// reach our asset endpoint, which requires the caller's device cookie.
 /// </param>
+/// <param name="Mask">
+/// Optional PNG edit mask. Transparent pixels are replaced; only protocols with an explicit mask
+/// part support it. Kept separate from <paramref name="ReferenceImages"/> because the upstream
+/// multipart form assigns it a different semantic field.
+/// </param>
 /// <param name="Count">How many images to produce. Clamped by the caller to 1-4.</param>
 /// <param name="OutputFormat">
 /// Encoding to ask the provider for — <c>png</c>, <c>jpeg</c> or <c>webp</c>. Left unnormalized
@@ -40,6 +45,7 @@ public sealed record ImageGenerationRequest(
     string ModelKey,
     string Prompt,
     IReadOnlyList<ReferenceImage> ReferenceImages,
+    ReferenceImage? Mask,
     string? Size,
     string? Quality,
     string? OutputFormat,

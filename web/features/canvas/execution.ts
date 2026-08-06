@@ -5,8 +5,10 @@ import { newRunId, useCanvasStore } from "@/features/canvas/store";
 import { collectUpstream } from "@/features/canvas/upstream";
 import {
   ASPECT_TO_SIZE,
+  DEFAULT_SEEDANCE_INPUT_MODE,
   DEFAULT_IMAGE_OUTPUT_FORMAT,
   DEFAULT_IMAGE_RESPONSE_FORMAT,
+  resolveVideoDuration,
   type ImageGenNodeData,
   type NodeExecution,
   type VideoGenNodeData,
@@ -229,7 +231,11 @@ function reportRunFailure(placeholders: string[], configNodeId: string, error: s
  * from is whichever generation node feeds this one, so a retry means the same settings, not a
  * remembered copy of them — the user may well have changed something before pressing it.
  */
-export function retryRun(nodeId: string, nodes: CanvasNode[], edges: CanvasEdge[]): void {
+export async function retryRun(
+  nodeId: string,
+  nodes: CanvasNode[],
+  edges: CanvasEdge[],
+): Promise<void> {
   const config = edges
     .filter((edge) => edge.target === nodeId)
     .map((edge) => nodes.find((candidate) => candidate.id === edge.source))
@@ -244,9 +250,9 @@ export function retryRun(nodeId: string, nodes: CanvasNode[], edges: CanvasEdge[
   const { nodes: fresh, edges: freshEdges } = useCanvasStore.getState();
 
   if (config.type === "imageGen") {
-    void runImageNode(config.id, fresh, freshEdges);
+    await runImageNode(config.id, fresh, freshEdges);
   } else {
-    void runVideoNode(config.id, fresh, freshEdges);
+    await runVideoNode(config.id, fresh, freshEdges);
   }
 }
 
@@ -266,7 +272,7 @@ export async function runImageNode(
   // an old error.
   store.setExecution(nodeId, undefined);
 
-  const { prompt, images } = collectUpstream(nodeId, nodes, edges);
+  const { prompt, images, maskUrl } = collectUpstream(nodeId, nodes, edges);
 
   if (!prompt && images.length === 0) {
     failConfigNode(nodeId, "Connect a text or image node first.");
@@ -312,6 +318,7 @@ export async function runImageNode(
         modelKey,
         prompt,
         images: images.map((image) => image.url),
+        maskUrl,
         size,
         quality: data.quality === "auto" ? undefined : data.quality,
         outputFormat: data.outputFormat ?? DEFAULT_IMAGE_OUTPUT_FORMAT,
@@ -391,6 +398,12 @@ export async function runVideoNode(
   const data = node.data as VideoGenNodeData;
   if (!data.providerId || !data.modelId) return;
 
+  const duration = resolveVideoDuration(data.duration);
+  if (duration === null) {
+    failConfigNode(nodeId, "Duration must be a whole number from 1 to 60 seconds.");
+    return;
+  }
+
   store.setExecution(nodeId, undefined);
 
   const { prompt, images } = collectUpstream(nodeId, nodes, edges);
@@ -440,9 +453,10 @@ export async function runVideoNode(
         modelKey,
         prompt,
         images: images.map((image) => image.url),
+        inputMode: data.seedanceInputMode ?? DEFAULT_SEEDANCE_INPUT_MODE,
         aspect: data.aspect,
         resolution: data.resolution,
-        duration: data.duration,
+        duration,
         fps: data.fps,
         seed: data.seed,
         watermark: data.watermark,

@@ -40,6 +40,32 @@ GET    /api/v1/ai/videos/{id} → { status, progress, assetUrl, error }
 DELETE /api/v1/ai/videos/{id} 取消（已完成的任务是 no-op）
 ```
 
+### Agent 与 Skills
+
+```
+POST   /api/v1/agent/sessions
+GET    /api/v1/agent/sessions?canvasId=...
+GET    /api/v1/agent/sessions/{id}/messages
+DELETE /api/v1/agent/sessions/{id}/messages
+POST   /api/v1/agent/sessions/{id}/runs
+GET    /api/v1/agent/runs/{id}
+GET    /api/v1/agent/runs/{id}/events?afterSeq=...
+DELETE /api/v1/agent/runs/{id}
+GET    /api/v1/agent/tools
+
+GET    /api/v1/skills/
+GET    /api/v1/skills/{id}
+POST   /api/v1/skills/scan        multipart，只扫描不安装
+POST   /api/v1/skills/            multipart，重新扫描同一上传并安装
+DELETE /api/v1/skills/{id}
+```
+
+Skill 安装接受 bare `SKILL.md` 或 ZIP。ZIP 逐 entry 读取，拒绝绝对路径、`..`、反斜杠、重复归一化路径、symlink、嵌套压缩包与异常压缩比，并限制上传大小、解压总量和 entry 数。danger 级发现必须二次确认；风险扫描不被当作沙箱。
+
+Agent 只在 run 开始时向模型披露 Skill 的 slug/name/description；完整正文和资源需通过 `load_skill` 按需读取。`run_skill_script` 只在隔离 runner 健康且存在脚本 Skill 时出现，每次执行均需审批。
+
+脚本不会在 `Sol.Api` 进程执行。API 通过 Unix socket 把单个 Skill 的文件发送给独立 runner；runner 容器无网络、无 Sol 配置/凭据/数据库卷、根文件系统只读。支持非特权 user namespace 的 Linux 内核用 bubblewrap 建立每-job user/pid/network/mount namespace；禁用该能力的 Docker Desktop 使用受限 chroot + 每-job 唯一 UID，且子进程看不到 `/proc`、控制 socket、其他 job 或容器根。仅固定解释器 `.sh`/`.py`/`.js` 可用，参数不经过 shell，CPU/地址空间/文件/进程/输出/时限均有硬上限。runner 不可用时 prose/resource Skills 仍可加载，只隐藏脚本工具。
+
 ### 画布与资产
 
 ```
@@ -73,7 +99,7 @@ DELETE /api/v1/canvas/assets/{id} 删除元数据行与磁盘文件
 
 前端在 `web/features/ai/protocol-support.ts` 维护同一份矩阵，驱动「尚未支持」标记。新增协议但客户端未就绪时，把该项标为 `planned`，UI 会自动禁用相关模型。
 
-**MCP 目前只有配置存储，没有任何客户端会去连接**，面板顶部有明确横幅说明。
+**MCP runtime 支持 Streamable HTTP 与 legacy SSE**；stdio 配置仍可存储，但服务端不会启动本地进程。所有 MCP tool 每次调用都必须由用户审批，URL 经 DNS 固定与 SSRF 私网过滤，header/env 值只以服务端密文保存。
 
 ### 协议解析：模型覆盖渠道
 

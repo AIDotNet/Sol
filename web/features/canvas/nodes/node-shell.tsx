@@ -42,6 +42,11 @@ export function NodeShell({
 }) {
   const t = useT();
   const busy = execution?.status === "queued" || execution?.status === "running";
+  const statusLabel = execution?.status === "queued" ? t("node.queued") : t("node.generating");
+  const progress =
+    typeof execution?.progress === "number" && Number.isFinite(execution.progress)
+      ? Math.round(Math.min(1, Math.max(0, execution.progress)) * 100)
+      : undefined;
 
   return (
     <div
@@ -71,14 +76,24 @@ export function NodeShell({
         {busy && (
           <div className="canvas-sweep canvas-fade-in nodrag absolute inset-0 flex flex-col items-center justify-center gap-2 overflow-hidden bg-background/70 backdrop-blur-[1px]">
             <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
-            <p className="text-[0.6875rem] text-muted-foreground">
-              {execution?.status === "queued" ? t("node.queued") : t("node.generating")}
+            <p className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+              <span>{statusLabel}</span>
+              {progress !== undefined && (
+                <span className="font-medium tabular-nums text-foreground">{progress}%</span>
+              )}
             </p>
-            {execution?.progress !== undefined && (
-              <div className="h-1 w-24 overflow-hidden rounded-full bg-muted">
+            {progress !== undefined && (
+              <div
+                role="progressbar"
+                aria-label={statusLabel}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+                className="h-1 w-24 overflow-hidden rounded-full bg-muted"
+              >
                 <div
                   className="h-full bg-primary transition-[width] duration-300 ease-out"
-                  style={{ width: `${Math.round(execution.progress * 100)}%` }}
+                  style={{ width: `${progress}%` }}
                 />
               </div>
             )}

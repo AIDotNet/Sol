@@ -8,11 +8,14 @@ using Sol.Application.Abstractions.Ai;
 using Sol.Application.Abstractions.Common;
 using Sol.Application.Abstractions.Messaging;
 using Sol.Application.Abstractions.Persistence;
+using Sol.Application.Abstractions.Realtime;
 using Sol.Application.Abstractions.Security;
 using Sol.Application.Contracts.Device;
+using Sol.Application.Features.Agent;
 using Sol.Application.Features.Identity;
 using Sol.Infrastructure.Ai;
 using Sol.Infrastructure.Ai.Protocols;
+using Sol.Infrastructure.Ai.Mcp;
 using Sol.Infrastructure.Caching;
 using Sol.Infrastructure.Common;
 using Sol.Infrastructure.Health;
@@ -21,6 +24,7 @@ using Sol.Infrastructure.Options;
 using Sol.Infrastructure.Persistence;
 using Sol.Infrastructure.Persistence.Migrations;
 using Sol.Infrastructure.Security;
+using Sol.Infrastructure.Skills;
 using StackExchange.Redis;
 
 namespace Sol.Infrastructure;
@@ -40,6 +44,16 @@ public static class DependencyInjection
             Microsoft.Extensions.Options.Options.Create(OptionsBinder.BindRabbitMq(configuration)));
         services.AddSingleton<IOptions<DeviceIdentityOptions>>(
             Microsoft.Extensions.Options.Options.Create(OptionsBinder.BindDeviceIdentity(configuration)));
+
+        var skillsOptions = OptionsBinder.BindSkills(configuration);
+        services.AddSingleton<IOptions<SkillsOptions>>(
+            Microsoft.Extensions.Options.Options.Create(skillsOptions));
+        services.AddSingleton(skillsOptions);
+
+        var mcpOptions = OptionsBinder.BindMcp(configuration);
+        services.AddSingleton<IOptions<McpOptions>>(
+            Microsoft.Extensions.Options.Options.Create(mcpOptions));
+        services.AddSingleton(mcpOptions);
 
         var aiOptions = OptionsBinder.BindAi(configuration);
         services.AddSingleton<IOptions<AiOptions>>(
@@ -80,6 +94,8 @@ public static class DependencyInjection
         services.AddScoped<ICanvasAssetRepository, CanvasAssetRepository>();
         services.AddScoped<ICanvasRepository, CanvasRepository>();
         services.AddScoped<IVideoJobRepository, VideoJobRepository>();
+        services.AddScoped<IAgentRepository, AgentRepository>();
+        services.AddScoped<ISkillRepository, SkillRepository>();
         services.AddSingleton<MigrationRunner>();
     }
 
@@ -119,6 +135,26 @@ public static class DependencyInjection
         services.AddSingleton<ITextGenerationClient, AnthropicTextClient>();
         services.AddSingleton<ITextGenerationClient, GeminiTextClient>();
         services.AddSingleton<ITextGenerationDispatcher, TextGenerationDispatcher>();
+
+        services.AddSingleton<IMcpNetworkGuard, McpNetworkGuard>();
+        services.AddSingleton<IMcpRuntime, McpRuntime>();
+        services.AddSingleton<ISkillPackageScanner, ZipSkillScanner>();
+        services.AddSingleton<ISkillStore, FileSystemSkillStore>();
+        services.AddSingleton<ISkillScriptRunner, UnixSocketSkillScriptRunner>();
+
+        services.AddSingleton<IAgentModelClient, AnthropicAgentClient>();
+        services.AddSingleton<IAgentModelClient, OpenAiChatAgentClient>();
+        services.AddSingleton<IAgentModelClient, OpenAiResponsesAgentClient>();
+        services.AddSingleton<IAgentModelDispatcher, AgentModelDispatcher>();
+        services.AddSingleton<IAgentCanvasBridge, AgentCanvasBridge>();
+        services.AddScoped<AgentTurnRunner>();
+
+        // Registered once and exposed through both interfaces. Calling AddHostedService<T>() plus
+        // AddSingleton<IAgentRunControl,T>() would create two hosts, so cancellation would target a
+        // different instance from the one executing runs.
+        services.AddSingleton<AgentRunHost>();
+        services.AddSingleton<IAgentRunControl>(sp => sp.GetRequiredService<AgentRunHost>());
+        services.AddHostedService(sp => sp.GetRequiredService<AgentRunHost>());
 
         // Advances video jobs server-side so they outlive the tab that started them.
         services.AddHostedService<VideoJobPoller>();

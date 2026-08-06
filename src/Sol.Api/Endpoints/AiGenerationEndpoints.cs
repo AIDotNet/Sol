@@ -259,6 +259,34 @@ public static class AiGenerationEndpoints
         }
 
         var protocol = provider.ResolveProtocol(model);
+
+        ReferenceImage? mask = null;
+        if (!string.IsNullOrWhiteSpace(request.MaskUrl))
+        {
+            if (protocol != ProviderType.OpenAiImages)
+            {
+                return Invalid("the selected image protocol does not support inpaint masks");
+            }
+
+            if (references.Count == 0)
+            {
+                return Invalid("an inpaint mask requires at least one reference image");
+            }
+
+            mask = await LoadReferenceAsync(request.MaskUrl, deviceId, assets, assetStore, ct);
+            if (mask is null)
+            {
+                // Unlike an ordinary reference, silently dropping a mask changes an inpaint into
+                // a variation of the whole image. That is destructive enough to fail explicitly.
+                return Invalid("the inpaint mask is not an available canvas asset");
+            }
+
+            if (!string.Equals(mask.MediaType, "image/png", StringComparison.OrdinalIgnoreCase))
+            {
+                return Invalid("the inpaint mask must be a PNG image");
+            }
+        }
+
         var count = Math.Clamp(request.Count ?? 1, 1, MaxImageCount);
 
         var result = await dispatcher.GenerateAsync(
@@ -269,6 +297,7 @@ public static class AiGenerationEndpoints
                 request.ModelKey,
                 request.Prompt,
                 references,
+                mask,
                 request.Size,
                 request.Quality,
                 request.OutputFormat,

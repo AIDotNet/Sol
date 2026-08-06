@@ -13,6 +13,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   BookOpen,
+  Bot,
   Check,
   CloudAlert,
   Copy,
@@ -44,6 +45,10 @@ import {
 } from "react";
 import { useT } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
+import { AgentPanel } from "@/features/agent/agent-panel";
+import { AgentRuntime } from "@/features/agent/agent-runtime";
+import { registerAgentCanvasControls } from "@/features/agent/canvas-control";
+import { useAgentStore } from "@/features/agent/store";
 import { useAiStore } from "@/features/ai/store";
 import {
   centredAt,
@@ -222,7 +227,7 @@ function CanvasInner({
 }) {
   const t = useT();
   const { resolvedTheme } = useTheme();
-  const { screenToFlowPosition, getNodes, getEdges, fitView } = useReactFlow();
+  const { screenToFlowPosition, getNodes, getEdges, fitView, zoomIn, zoomOut } = useReactFlow();
 
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
@@ -239,6 +244,8 @@ function CanvasInner({
   const load = useCanvasStore((state) => state.load);
 
   const loadAi = useAiStore((state) => state.load);
+  const agentOpen = useAgentStore((state) => state.open);
+  const setAgentOpen = useAgentStore((state) => state.setOpen);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
@@ -249,6 +256,41 @@ function CanvasInner({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const hydrated = useRef(false);
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const autosavePending = useRef(false);
+  const positionGestures = useRef(new Set<string>());
+
+  const clearAutosaveTimer = useCallback(() => {
+    clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = undefined;
+  }, []);
+
+  const scheduleAutosave = useCallback(() => {
+    clearAutosaveTimer();
+    if (!autosavePending.current || positionGestures.current.size > 0) return;
+
+    autosaveTimer.current = setTimeout(() => {
+      autosaveTimer.current = undefined;
+
+      // Drag start normally clears this timer. Recheck here as well so callback ordering can never
+      // make persistence read an intermediate node position.
+      if (positionGestures.current.size > 0) return;
+
+      autosavePending.current = false;
+      const state = useCanvasStore.getState();
+      void persistCanvas(canvasId, state.nodes, state.edges).then(setSaveState);
+    }, AUTOSAVE_DELAY_MS);
+  }, [canvasId, clearAutosaveTimer]);
+
+  useEffect(
+    () =>
+      registerAgentCanvasControls({
+        fitView: () => fitView({ duration: 200, maxZoom: 1 }),
+        zoomIn: () => zoomIn({ duration: 150 }),
+        zoomOut: () => zoomOut({ duration: 150 }),
+      }),
+    [fitView, zoomIn, zoomOut],
+  );
 
   // Restore before the first autosave can run, so an empty initial store never overwrites a
   // saved canvas. The local copy paints instantly; the server copy wins if it is newer.
@@ -293,22 +335,19 @@ function CanvasInner({
   /**
    * Autosave.
    *
-   * Subscribing to `revision` in render looks like it would cost a re-render per pointer frame
-   * during a drag, but `nodes` is read here too and changes identity on those same frames, so
-   * the component re-renders either way. Left as the simpler of the two.
+   * Live node positions still update on every pointer frame, but their revision is deferred until
+   * release. The drag callbacks below also suspend any timer armed by an earlier edit, ensuring its
+   * callback cannot read and persist an intermediate position.
    */
   useEffect(() => {
     if (!hydrated.current) return;
 
+    autosavePending.current = true;
     setSaveState("saving");
+    scheduleAutosave();
+  }, [revision, scheduleAutosave]);
 
-    const timer = setTimeout(() => {
-      const state = useCanvasStore.getState();
-      void persistCanvas(canvasId, state.nodes, state.edges).then(setSaveState);
-    }, AUTOSAVE_DELAY_MS);
-
-    return () => clearTimeout(timer);
-  }, [revision, canvasId]);
+  useEffect(() => clearAutosaveTimer, [clearAutosaveTimer]);
 
   // Keyboard commands. A global listener is safe as long as it ignores events from inside text
   // fields, where these chords mean their normal editing thing.
@@ -454,10 +493,39 @@ function CanvasInner({
 
   const onMoveStart = useCallback(() => setGesture("move", true), [setGesture]);
   const onMoveEnd = useCallback(() => setGesture("move", false), [setGesture]);
-  const onNodeDragStart = useCallback(() => setGesture("node", true), [setGesture]);
-  const onNodeDragStop = useCallback(() => setGesture("node", false), [setGesture]);
-  const onSelectionDragStart = useCallback(() => setGesture("selection", true), [setGesture]);
-  const onSelectionDragStop = useCallback(() => setGesture("selection", false), [setGesture]);
+
+  const setPositionGesture = useCallback(
+    (name: string, active: boolean) => {
+      setGesture(name, active);
+
+      if (active) {
+        positionGestures.current.add(name);
+        clearAutosaveTimer();
+        return;
+      }
+
+      positionGestures.current.delete(name);
+      if (positionGestures.current.size === 0) scheduleAutosave();
+    },
+    [clearAutosaveTimer, scheduleAutosave, setGesture],
+  );
+
+  const onNodeDragStart = useCallback(
+    () => setPositionGesture("node", true),
+    [setPositionGesture],
+  );
+  const onNodeDragStop = useCallback(
+    () => setPositionGesture("node", false),
+    [setPositionGesture],
+  );
+  const onSelectionDragStart = useCallback(
+    () => setPositionGesture("selection", true),
+    [setPositionGesture],
+  );
+  const onSelectionDragStop = useCallback(
+    () => setPositionGesture("selection", false),
+    [setPositionGesture],
+  );
 
   const closeMenu = useCallback(() => setMenu(null), []);
 
@@ -551,7 +619,10 @@ function CanvasInner({
         {/* Colours come from colorMode; overriding them here fought its dark palette and
             left a light ring around the mask. */}
         <MiniMap
-          className="!right-4 !bottom-4 !rounded-lg !border !border-border"
+          className={cn(
+            "!bottom-4 !rounded-lg !border !border-border",
+            agentOpen ? "!right-[25rem] max-lg:!hidden" : "!right-4",
+          )}
           pannable
           zoomable
           nodeColor="var(--color-muted-foreground)"
@@ -630,11 +701,19 @@ function CanvasInner({
         />
         <div className="mx-0.5 h-5 w-px bg-border" />
         <ToolButton
+          icon={Bot}
+          label={t("agent.open")}
+          onPress={() => setAgentOpen(!agentOpen)}
+        />
+        <ToolButton
           icon={Settings}
           label={t("canvas.settings")}
           onPress={() => setSettingsOpen(true)}
         />
       </div>
+
+      <AgentRuntime canvasId={canvasId} />
+      {agentOpen && <AgentPanel />}
 
       {menu && (
         <>

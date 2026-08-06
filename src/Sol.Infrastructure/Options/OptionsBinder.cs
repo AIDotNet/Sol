@@ -72,6 +72,41 @@ internal static class OptionsBinder
         };
     }
 
+    public static SkillsOptions BindSkills(IConfiguration configuration)
+    {
+        var section = configuration.GetSection(SkillsOptions.SectionName);
+        return new SkillsOptions
+        {
+            Root = section["Root"] ?? "./storage/skills",
+            MaxUploadBytes = Math.Clamp(
+                ReadInt(section["MaxUploadBytes"], 25 * 1024 * 1024), 1_048_576, 52_428_800),
+            MaxExtractedBytes = Math.Clamp(
+                ReadInt(section["MaxExtractedBytes"], 100 * 1024 * 1024), 1_048_576, 209_715_200),
+            MaxEntries = Math.Clamp(ReadInt(section["MaxEntries"], 1_000), 10, 5_000),
+            RunnerSocketPath = section["RunnerSocketPath"] ?? "./storage/runner/runner.sock",
+            RunnerTimeoutSeconds = Math.Clamp(ReadInt(section["RunnerTimeoutSeconds"], 30), 1, 120),
+            RunnerMaxOutputBytes = Math.Clamp(
+                ReadInt(section["RunnerMaxOutputBytes"], 256 * 1024), 16_384, 1_048_576),
+            // 25 MiB expands to ~33.4 MiB as base64, leaving bounded room for paths, stdin,
+            // arguments, and JSON under the runner's 40 MiB request envelope.
+            RunnerMaxPackageBytes = Math.Clamp(
+                ReadInt(section["RunnerMaxPackageBytes"], 25 * 1024 * 1024),
+                1_048_576, 25 * 1024 * 1024),
+        };
+    }
+
+    public static McpOptions BindMcp(IConfiguration configuration)
+    {
+        var section = configuration.GetSection(McpOptions.SectionName);
+        return new McpOptions
+        {
+            AllowLoopbackHttp = ReadBool(section["AllowLoopbackHttp"], false),
+            RequestTimeoutSeconds = Math.Clamp(ReadInt(section["RequestTimeoutSeconds"], 30), 5, 120),
+            MaxResponseBytes = Math.Clamp(
+                ReadInt(section["MaxResponseBytes"], 1_048_576), 65_536, 4_194_304),
+        };
+    }
+
     public static AiOptions BindAi(IConfiguration configuration)
     {
         var section = configuration.GetSection(AiOptions.SectionName);

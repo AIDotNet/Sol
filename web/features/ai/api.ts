@@ -203,6 +203,12 @@ export interface McpEnvEntry {
   value: string;
 }
 
+export interface McpSecretEntry {
+  key: string;
+  isConfigured: boolean;
+  hint: string;
+}
+
 export interface McpServer {
   id: string;
   name: string;
@@ -211,10 +217,10 @@ export interface McpServer {
   transport: McpTransport;
   command: string | null;
   args: string[];
-  env: McpEnvEntry[];
+  env: McpSecretEntry[];
   cwd: string | null;
   url: string | null;
-  headers: McpEnvEntry[];
+  headers: McpSecretEntry[];
   autoFallback: boolean;
   createdAt: string;
   updatedAt: string;
@@ -251,6 +257,26 @@ export function updateMcpServer(
 
 export function deleteMcpServer(id: string): Promise<void> {
   return request(`/mcp/servers/${id}`, { method: "DELETE" });
+}
+
+export interface McpCheckResult {
+  ok: boolean;
+  error: string | null;
+  toolCount: number;
+}
+
+export function checkMcpServer(id: string): Promise<McpCheckResult> {
+  return request(`/mcp/servers/${id}/check`, { method: "POST" });
+}
+
+export interface McpToolSummary {
+  name: string;
+  description: string;
+  inputSchemaJson: string;
+}
+
+export function listMcpTools(id: string): Promise<{ tools: McpToolSummary[] }> {
+  return request(`/mcp/servers/${id}/tools`);
 }
 
 export function importMcpServers(

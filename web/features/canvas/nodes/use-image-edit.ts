@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { uploadAsset } from "@/features/ai/api";
+import { applyImageEdit } from "@/features/canvas/image-edit";
 import {
   cropImage,
   type CropRect,
@@ -9,7 +9,6 @@ import {
   type FlipAxis,
   flipImage,
   rotateImage,
-  toUploadFile,
   upscaleImage,
 } from "@/features/canvas/image-ops";
 import { useCanvasStore } from "@/features/canvas/store";
@@ -37,13 +36,7 @@ export function useImageEdit(nodeId: string, sourceUrl: string | undefined) {
       setError(null);
 
       try {
-        const blob = await produce(sourceUrl);
-        const asset = await uploadAsset(toUploadFile(blob, label));
-
-        spawnOutput(nodeId, "image", {
-          assetUrl: asset.url,
-          mediaType: asset.mediaType,
-        });
+        await applyImageEdit(nodeId, sourceUrl, produce, label, {}, { spawn: spawnOutput });
       } catch (editError) {
         setError(editError instanceof Error ? editError.message : "Edit failed");
       } finally {

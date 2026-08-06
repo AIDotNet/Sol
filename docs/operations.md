@@ -59,7 +59,13 @@ OpenTelemetry 1.17.0，OTLP exporter **仅在配置了 endpoint 时启用**，�
 | `DeviceIdentity:CoarseWindowHours` | 候选时间窗，默认 24 |
 | `Ai:EncryptionKey` | **密钥**，base64 编码的 32 字节，加密渠道 API Key |
 | `Ai:AssetRoot` | 生成的图片/视频落盘目录，默认 `./storage/assets` |
-| `Ai:RequestTimeoutSeconds` | 上游生成请求超时，默认 300 |
+| `Ai:RequestTimeoutSeconds` | 上游生成请求超时，默认 1200，绑定时最低 600 |
+| `Skills:Root` | 已安装 Skill 文件根目录，默认 `./storage/skills` |
+| `Skills:MaxUploadBytes` / `MaxExtractedBytes` / `MaxEntries` | Skill 包边界 |
+| `Skills:RunnerSocketPath` | Sol.Api 到隔离 runner 的 Unix socket |
+| `Skills:RunnerTimeoutSeconds` | 脚本最长时限，默认 30，最大 120 |
+| `Skills:RunnerMaxOutputBytes` | stdout/stderr 各自上限，默认 256 KiB，绑定范围 16 KiB–1 MiB |
+| `Skills:RunnerMaxPackageBytes` | 单次发送给 runner 的解码后包上限，默认/最大 25 MiB；为 base64 与 JSON 开销预留空间 |
 | `OpenTelemetry:OtlpEndpoint` | 留空则不导出 |
 
 环境变量用双下划线：`DeviceIdentity__Pepper`、`Postgres__ConnectionString`。
@@ -75,6 +81,25 @@ OpenTelemetry 1.17.0，OTLP exporter **仅在配置了 endpoint 时启用**，�
 **视频任务轮询是单实例假设**：`VideoJobPoller` 是一个 `BackgroundService`，每 5 秒取一批 `pending`/`running` 的任务推进。**多副本部署时每个实例都会轮询同一批任务**——上游会被重复查询，完成时也可能重复下载同一个视频。要横向扩容需要 `SELECT ... FOR UPDATE SKIP LOCKED` 或选主，目前未实现。单实例下行为正确。
 
 超过 30 分钟没有进展的任务会被标记为 failed（`VideoJobPoller.StaleAfter`），避免上游接了任务却再不回报时留下永远轮询的行。
+
+## Skill runner
+
+上传包中的脚本绝不在 `Sol.Api` 内执行。`docker-compose.yml` 的 `skill-runner` 使用 `network_mode: none`、只读根文件系统、非 root 用户、capabilities 全部丢弃、`no-new-privileges`、CPU/内存/pids/tmpfs 限制，而且不挂载 Postgres/Redis/RabbitMQ、Skill 根目录、资产目录、源码或 Docker socket。API 与 runner 只共享 Unix socket 目录；每次请求只发送当前 Skill 的文件。
+
+runner 优先用 bubblewrap 为每个 job 建立独立 user/pid/network/ipc/uts/mount namespace。Docker Desktop 默认禁止非特权 user namespace，因此另有经过实测的受限 chroot fallback：runner 只持有 `CHOWN`/`DAC_OVERRIDE`/`KILL`/`SETGID`/`SETUID`/`SYS_CHROOT`，构造私有只读 runtime 与 Skill 根后切换到每-job 唯一 UID，Linux 自动清空子进程 capabilities。两条路径都提供私有可写 work/tmp 并清空环境变量；子进程看不到控制 socket、`/proc`、Sol 凭据、容器根或其他 job。`.sh`、`.py`、`.js` 分别绑定固定解释器，上传包的 shebang 不参与选择。
+
+```bash
+# 构建并启动；若 runner 或 bubblewrap 不健康，Agent 会隐藏 run_skill_script，
+# 但 load_skill 与普通资源仍然可用。
+docker compose up -d --build skill-runner
+
+docker compose logs skill-runner
+ls -l src/Sol.Api/storage/runner/runner.sock
+```
+
+macOS Docker Desktop 的 VirtioFS 不能承载容器创建的 Unix socket，因此 compose 使用 Docker-managed `sol-runner-socket` volume，而不是宿主 bind mount。生产应把 API 与 runner 放进同一 Linux 编排单元并挂载这个 socket volume。若开发时仍从宿主运行 `Sol.Api`，它无法看见 VM 内 volume，`run_skill_script` 会被安全地隐藏；不要回退到公开 TCP，也不要为了启动 sibling container 而把 Docker socket 交给 API。runner 不可用时是可降级状态，不影响安装或加载 prose Skills。
+
+普通 sandbox escape 最多落在无网络、无 Sol secret、无其他用户文件的 runner 容器；容器/内核级逃逸不可能由应用层完全消除，需同时依赖固定最小镜像、内核更新、seccomp/no-new-privileges、cap drop 与资源上限。
 
 ## 部署
 

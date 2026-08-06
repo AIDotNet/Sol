@@ -8,10 +8,10 @@ public sealed record McpServerResponse(
     string Transport,
     string? Command,
     string[] Args,
-    McpEnvEntry[] Env,
+    McpSecretEntry[] Env,
     string? Cwd,
     string? Url,
-    McpEnvEntry[] Headers,
+    McpSecretEntry[] Headers,
     bool AutoFallback,
     string CreatedAt,
     string UpdatedAt);
@@ -25,6 +25,9 @@ public sealed record McpServerResponse(
 /// renders these as an editable list where rows jumping around on every save is disorienting.
 /// </remarks>
 public sealed record McpEnvEntry(string Key, string Value);
+
+/// <summary>Secret metadata returned to the browser; the value itself never leaves the server.</summary>
+public sealed record McpSecretEntry(string Key, bool IsConfigured, string Hint);
 
 public sealed record McpServerListResponse(McpServerResponse[] Servers);
 
@@ -58,3 +61,9 @@ public sealed record UpdateMcpServerRequest(
 public sealed record ImportMcpServersRequest(CreateMcpServerRequest[] Servers);
 
 public sealed record ImportMcpServersResponse(int Added);
+
+public sealed record McpServerCheckResponse(bool Ok, string? Error, int ToolCount);
+
+public sealed record McpToolResponse(string Name, string Description, string InputSchemaJson);
+
+public sealed record McpToolListResponse(McpToolResponse[] Tools);

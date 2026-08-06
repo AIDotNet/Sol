@@ -158,6 +158,69 @@ test("a canvas survives clearing local storage", async ({ page }) => {
   });
 });
 
+test("a node position is saved only after drag release", async ({ page }) => {
+  await establishDevice(page);
+  await page.goto("/");
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("button", { name: "文本节点" }).click();
+  await waitForSaved(page);
+
+  const header = page.locator(".react-flow__node header").first();
+  const box = await header.boundingBox();
+  expect(box).not.toBeNull();
+
+  const baseline = await page.evaluate(() => {
+    const canvasId = localStorage.getItem("sol.canvas.current");
+    return {
+      canvasId,
+      snapshot: canvasId ? localStorage.getItem(`sol.canvas.${canvasId}`) : null,
+    };
+  });
+  expect(baseline.canvasId).not.toBeNull();
+  expect(baseline.snapshot).not.toBeNull();
+
+  const saves: Array<{ graph?: { nodes?: Array<{ id: string; position: { x: number; y: number } }> } }> = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "PUT" &&
+      request.url().includes(`/api/v1/canvas/${baseline.canvasId}`)
+    ) {
+      saves.push(request.postDataJSON());
+    }
+  });
+
+  // Arm an autosave first. Drag start must cancel it as well as suppressing the position frames.
+  await page.locator("textarea").first().fill("saved with the released position");
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width / 2 + 120, box!.y + box!.height / 2 + 80, {
+    steps: 10,
+  });
+  await page.waitForTimeout(700);
+
+  expect(saves).toHaveLength(0);
+  expect(
+    await page.evaluate((canvasId) => localStorage.getItem(`sol.canvas.${canvasId}`), baseline.canvasId),
+  ).toBe(baseline.snapshot);
+
+  await page.mouse.up();
+  await expect.poll(() => saves.length, { timeout: 20_000 }).toBe(1);
+  await waitForSaved(page);
+
+  const savedSnapshot = await page.evaluate(
+    (canvasId) => JSON.parse(localStorage.getItem(`sol.canvas.${canvasId}`) ?? "null"),
+    baseline.canvasId,
+  );
+  const baselineSnapshot = JSON.parse(baseline.snapshot!);
+  expect(savedSnapshot.nodes[0].position).not.toEqual(baselineSnapshot.nodes[0].position);
+  expect(saves[0].graph?.nodes?.[0].position).toEqual(savedSnapshot.nodes[0].position);
+  expect(savedSnapshot.nodes[0].data.text).toBe("saved with the released position");
+
+  await page.waitForTimeout(700);
+  expect(saves).toHaveLength(1);
+});
+
 test("a node context menu can duplicate and delete", async ({ page }) => {
   await establishDevice(page);
   await page.goto("/");

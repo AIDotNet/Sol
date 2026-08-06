@@ -29,6 +29,7 @@ public sealed record VideoGenerationRequest(
     string ModelKey,
     string Prompt,
     IReadOnlyList<ReferenceImage> ReferenceImages,
+    string? InputMode,
     string? Aspect,
     string? Resolution,
     int? DurationSeconds,

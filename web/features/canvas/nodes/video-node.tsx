@@ -28,7 +28,7 @@ export function VideoNode({ id, data, selected }: NodeProps) {
         selected={selected}
         execution={nodeData.execution}
         onCancel={() => cancelRun(id)}
-        onRetry={() => retryRun(id, getNodes(), getEdges())}
+        onRetry={() => void retryRun(id, getNodes(), getEdges())}
       >
         <div className="nodrag flex h-full w-full items-center justify-center overflow-hidden bg-black/80">
           {nodeData.assetUrl ? (

@@ -31,43 +31,13 @@ internal sealed class SeedanceVideoClient(
         var baseUrl = request.Provider.BaseUrl.TrimEnd('/');
         var structured = IsStructuredModel(request.ModelKey);
 
-        var content = new JsonArray();
-
-        // Reference images come first; the first is treated as the opening frame.
-        foreach (var reference in request.ReferenceImages)
+        if (IsFirstLastMode(request.InputMode) && request.ReferenceImages.Count > 2)
         {
-            content.Add((JsonNode)new JsonObject
-            {
-                ["type"] = "image_url",
-                ["image_url"] = new JsonObject
-                {
-                    ["url"] = $"data:{reference.MediaType};base64,{Convert.ToBase64String(reference.Bytes)}",
-                },
-            });
+            return VideoSubmitResult.Failure(
+                400, "first-last mode accepts at most two connected images");
         }
 
-        content.Add((JsonNode)new JsonObject
-        {
-            ["type"] = "text",
-            ["text"] = structured ? request.Prompt : BuildFlaggedPrompt(request),
-        });
-
-        var body = new JsonObject
-        {
-            ["model"] = request.ModelKey,
-            ["content"] = content,
-        };
-
-        if (structured)
-        {
-            // 2.x takes these as real fields. fps is deliberately absent — it is rejected.
-            if (request.Resolution is { } resolution) body["resolution"] = resolution;
-            if (request.DurationSeconds is { } duration) body["duration"] = duration;
-            if (request.Aspect is { } aspect) body["ratio"] = aspect;
-            if (request.Seed is { } seed) body["seed"] = seed;
-            if (request.Watermark is { } watermark) body["watermark"] = watermark;
-            if (request.GenerateAudio is { } audio) body["generate_audio"] = audio;
-        }
+        var body = BuildRequestBody(request, structured);
 
         using var message = new HttpRequestMessage(
             HttpMethod.Post, $"{baseUrl}/contents/generations/tasks")
@@ -154,6 +124,59 @@ internal sealed class SeedanceVideoClient(
         }
     }
 
+    internal static JsonObject BuildRequestBody(VideoGenerationRequest request) =>
+        BuildRequestBody(request, IsStructuredModel(request.ModelKey));
+
+    private static JsonObject BuildRequestBody(VideoGenerationRequest request, bool structured)
+    {
+        var content = new JsonArray();
+        var firstLastMode = IsFirstLastMode(request.InputMode);
+
+        // The API treats frame content and reference media as mutually exclusive. Canvas inputs
+        // are ordered nearest first, so first-last mode maps the first two images to the two
+        // frame roles; reference mode keeps every image in the reference-media family.
+        for (var i = 0; i < request.ReferenceImages.Count; i++)
+        {
+            var reference = request.ReferenceImages[i];
+            content.Add((JsonNode)new JsonObject
+            {
+                ["type"] = "image_url",
+                ["role"] = firstLastMode
+                    ? i == 0 ? "first_frame" : "last_frame"
+                    : "reference_image",
+                ["image_url"] = new JsonObject
+                {
+                    ["url"] = $"data:{reference.MediaType};base64,{Convert.ToBase64String(reference.Bytes)}",
+                },
+            });
+        }
+
+        content.Add((JsonNode)new JsonObject
+        {
+            ["type"] = "text",
+            ["text"] = structured ? request.Prompt : BuildFlaggedPrompt(request),
+        });
+
+        var body = new JsonObject
+        {
+            ["model"] = request.ModelKey,
+            ["content"] = content,
+        };
+
+        if (structured)
+        {
+            // 2.x takes these as real fields. fps is deliberately absent — it is rejected.
+            if (request.Resolution is { } resolution) body["resolution"] = resolution;
+            if (request.DurationSeconds is { } duration) body["duration"] = duration;
+            if (request.Aspect is { } aspect) body["ratio"] = aspect;
+            if (request.Seed is { } seed) body["seed"] = seed;
+            if (request.Watermark is { } watermark) body["watermark"] = watermark;
+            if (request.GenerateAudio is { } audio) body["generate_audio"] = audio;
+        }
+
+        return body;
+    }
+
     /// <summary>
     /// Appends 1.x parameters to the prompt as <c>--flag value</c> pairs.
     /// </summary>
@@ -180,6 +203,9 @@ internal sealed class SeedanceVideoClient(
     private static bool IsStructuredModel(string modelKey) =>
         modelKey.Contains("seedance-2", StringComparison.OrdinalIgnoreCase)
         || modelKey.Contains("seedance-pro-2", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFirstLastMode(string? inputMode) =>
+        string.Equals(inputMode, "first-last", StringComparison.OrdinalIgnoreCase);
 
     private static string? ReadVideoUrl(JsonElement root) =>
         root.TryGetProperty("content", out var content)
