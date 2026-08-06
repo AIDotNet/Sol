@@ -61,6 +61,18 @@ visitor 1 ──< device_link >── 1 device
 | `checksum` | `bytea` | 脚本的 SHA-256，**每次启动重新校验** |
 | `applied_at` | `timestamptz` | |
 
+### `canvas_asset_group` — 素材分组
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `group_id` | `uuid` PK | UUIDv7 分组 ID |
+| `device_id` | `uuid` FK → device | 分组只属于当前设备 |
+| `name` | `text` | 同一设备内不区分大小写唯一 |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+`canvas_asset.group_id` 是可空外键，删除分组时 `ON DELETE SET NULL`，因此分组删除不会
+删除或破坏素材。
+
 ## 索引
 
 ```sql

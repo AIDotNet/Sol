@@ -120,7 +120,15 @@ POST   /api/v1/canvas/assets      上传图片（multipart）
 GET    /api/v1/canvas/assets      素材库列表（?kind=image|video，?limit 上限 200）
 GET    /api/v1/canvas/assets/{id} 流式返回字节
 DELETE /api/v1/canvas/assets/{id} 删除元数据行与磁盘文件
+GET    /api/v1/canvas/assets/groups          分组列表（含每组素材数）
+POST   /api/v1/canvas/assets/groups          新建分组（{ name }）
+PATCH  /api/v1/canvas/assets/groups/{id}     重命名分组（{ name }）
+DELETE /api/v1/canvas/assets/groups/{id}     删除分组，素材回到未分组
+PATCH  /api/v1/canvas/assets/group           批量归组（{ assetIds, groupId }，null 表示移出）
 ```
+
+素材分组与素材一样按设备隔离。分组只是元数据；删除分组不会删除素材文件，外键会把
+其中的素材置为未分组。
 
 **删除的顺序是先删行、后删文件**：若删文件失败，结果是一个孤儿文件，而不是一行指向不存在文件的记录。仍然引用该资产的画布节点会显示破图——这是有意的取舍，否则「可能被引用」会让素材库根本无法清理。
 
