@@ -175,7 +175,7 @@ export function ProjectMenu({
               than landing on the graph underneath. */}
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
 
-          <div className="absolute top-full left-0 z-30 mt-1 flex w-64 flex-col rounded-lg border bg-popover p-1 shadow-lg">
+          <div className="canvas-menu absolute top-full left-0 z-30 mt-1 flex w-64 flex-col rounded-lg border bg-popover p-1 shadow-lg">
             <div className="max-h-72 overflow-y-auto">
               {projects.map((project) =>
                 renamingId === project.id ? (

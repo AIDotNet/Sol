@@ -22,6 +22,7 @@ import {
   Grid3x3,
   ImageIcon,
   Images,
+  LayoutGrid,
   Loader2,
   Maximize,
   Redo2,
@@ -32,6 +33,7 @@ import {
   Undo2,
   Upload as UploadIcon,
   Wand2,
+  Workflow,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -45,6 +47,7 @@ import {
 } from "react";
 import { useT } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentPanel } from "@/features/agent/agent-panel";
 import { AgentRuntime } from "@/features/agent/agent-runtime";
 import { registerAgentCanvasControls } from "@/features/agent/canvas-control";
@@ -64,6 +67,7 @@ import { ImageNode } from "@/features/canvas/nodes/image-node";
 import { TextNode } from "@/features/canvas/nodes/text-node";
 import { VideoGenNode } from "@/features/canvas/nodes/video-gen-node";
 import { VideoNode } from "@/features/canvas/nodes/video-node";
+import { WorkflowTemplateDialog } from "@/features/canvas/workflow-template-dialog";
 import { exportCanvas, importCanvas } from "@/features/canvas/persistence";
 import { useCanvasStore } from "@/features/canvas/store";
 import { createCanvas, listCanvases, summarize, type CanvasSummary } from "@/features/canvas/api";
@@ -76,9 +80,11 @@ import {
   resolveCanvas,
   type SaveState,
 } from "@/features/canvas/sync";
+import type { CanvasTemplateDefinition } from "@/features/canvas/templates";
 import { NODE_DEFAULT_SIZE, type NodeKind } from "@/features/canvas/types";
 import { wouldCreateCycle } from "@/features/canvas/upstream";
 import { SettingsDialog } from "@/features/settings/settings-dialog";
+import { AuthMenu } from "@/features/auth/auth-menu";
 import { UrlConfigPrompt } from "@/features/settings/url-config-prompt";
 import { handshake, storedDeviceId } from "@/lib/device";
 import { cn } from "@/lib/utils";
@@ -110,7 +116,7 @@ const NODE_TYPES = {
  * is rebuilt each of those frames and looks like a changed prop to React Flow. Out here they
  * are allocated once.
  */
-const PRO_OPTIONS = { hideAttribution: false };
+const PRO_OPTIONS = { hideAttribution: true };
 // Capped: fitView scales to fill the viewport, so one or two small nodes would otherwise zoom
 // to 3x and fill the screen with a single text box.
 const FIT_VIEW_OPTIONS = { maxZoom: 1, padding: 0.2 };
@@ -236,7 +242,9 @@ function CanvasInner({
   const onEdgesChange = useCanvasStore((state) => state.onEdgesChange);
   const onConnect = useCanvasStore((state) => state.onConnect);
   const addNode = useCanvasStore((state) => state.addNode);
+  const addTemplate = useCanvasStore((state) => state.addTemplate);
   const duplicateNode = useCanvasStore((state) => state.duplicateNode);
+  const autoLayout = useCanvasStore((state) => state.autoLayout);
   const removeNodes = useCanvasStore((state) => state.removeNodes);
   const selectAll = useCanvasStore((state) => state.selectAll);
   const undo = useCanvasStore((state) => state.undo);
@@ -250,6 +258,7 @@ function CanvasInner({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [background, setBackground] = useState<BackgroundVariant | "none">(BackgroundVariant.Dots);
   const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -455,6 +464,72 @@ function CanvasInner({
     [addNode, screenToFlowPosition, getNodes],
   );
 
+  const addTemplateAt = useCallback(
+    (template: CanvasTemplateDefinition) => {
+      const existing = getNodes();
+      let origin: { x: number; y: number };
+
+      if (existing.length > 0) {
+        let rightmost = existing[0];
+        for (const node of existing) {
+          const nodeWidth = node.width ?? NODE_DEFAULT_SIZE[(node.type ?? "text") as NodeKind].width;
+          const rightmostWidth =
+            rightmost.width ?? NODE_DEFAULT_SIZE[(rightmost.type ?? "text") as NodeKind].width;
+          if (node.position.x + nodeWidth > rightmost.position.x + rightmostWidth) {
+            rightmost = node;
+          }
+        }
+
+        origin = {
+          x:
+            rightmost.position.x +
+            (rightmost.width ?? NODE_DEFAULT_SIZE[(rightmost.type ?? "text") as NodeKind].width) +
+            80,
+          y: rightmost.position.y,
+        };
+      } else {
+        const width = Math.max(
+          ...template.nodes.map(
+            (node) => node.position.x + NODE_DEFAULT_SIZE[node.kind].width,
+          ),
+        );
+        const height = Math.max(
+          ...template.nodes.map(
+            (node) => node.position.y + NODE_DEFAULT_SIZE[node.kind].height,
+          ),
+        );
+        const centre = viewportCentre();
+        origin = { x: centre.x - width / 2, y: centre.y - height / 2 };
+      }
+
+      const created = addTemplate(template, origin);
+      setMenu(null);
+
+      // The template may be taller than the current view. Fit only the inserted graph after
+      // React Flow receives the new controlled nodes, keeping the example immediately visible.
+      window.requestAnimationFrame(() => {
+        void fitView({
+          nodes: created.map((id) => ({ id })),
+          duration: 250,
+          maxZoom: 1,
+          padding: 0.2,
+        });
+      });
+    },
+    [addTemplate, fitView, getNodes, viewportCentre],
+  );
+
+  const runAutoLayout = useCallback(() => {
+    autoLayout();
+    setMenu(null);
+
+    // React Flow receives controlled node positions on the next render. Fit after that commit
+    // so the newly arranged graph is immediately visible even when it is larger than the viewport.
+    window.requestAnimationFrame(() => {
+      void fitView({ duration: 250, maxZoom: 1, padding: 0.2 });
+    });
+  }, [autoLayout, fitView]);
+
   /**
    * Rejects a connection that would close a loop.
    *
@@ -620,7 +695,7 @@ function CanvasInner({
             left a light ring around the mask. */}
         <MiniMap
           className={cn(
-            "!bottom-4 !rounded-lg !border !border-border",
+          "!bottom-16 !rounded-lg !border !border-border",
             agentOpen ? "!right-[25rem] max-lg:!hidden" : "!right-4",
           )}
           pannable
@@ -628,6 +703,24 @@ function CanvasInner({
           nodeColor="var(--color-muted-foreground)"
         />
       </ReactFlow>
+
+      <a
+        href="https://github.com/AIDotNet/Sol"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="GitHub"
+        title="GitHub"
+        className={cn(
+          "canvas-panel absolute bottom-4 right-4 z-10 flex size-9 items-center justify-center rounded-lg border shadow-md transition-colors hover:bg-accent hover:text-accent-foreground",
+          agentOpen && "right-[25rem] max-lg:right-4",
+        )}
+      >
+        <span
+          className="size-4 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
+          style={{ maskImage: "url('/github.svg')" }}
+          aria-hidden
+        />
+      </a>
 
       {/* Top-left: the open project, with the add-node rail beneath it. */}
       <div className="absolute top-4 left-4 z-10 flex flex-col items-start gap-2">
@@ -652,6 +745,11 @@ function CanvasInner({
           <ToolButton icon={Film} label={t("canvas.nodeVideoGen")} onPress={() => addAt("videoGen")} />
           <div className="my-0.5 h-px bg-border" />
           <ToolButton
+            icon={Workflow}
+            label={t("canvas.workflowTemplates")}
+            onPress={() => setTemplatesOpen(true)}
+          />
+          <ToolButton
             icon={BookOpen}
             label={t("canvas.promptLibrary")}
             onPress={() => setPromptsOpen(true)}
@@ -666,10 +764,13 @@ function CanvasInner({
 
       {/* Top-right controls */}
       <div className="canvas-panel absolute top-4 right-4 z-10 flex items-center gap-1 rounded-xl border p-1 shadow-md [animation-delay:120ms]">
+        <AuthMenu />
+        <div className="mx-0.5 h-5 w-px bg-border" />
         <SaveIndicator state={saveState} />
         <div className="mx-0.5 h-5 w-px bg-border" />
         <ToolButton icon={Undo2} label={t("canvas.undo")} onPress={undo} />
         <ToolButton icon={Redo2} label={t("canvas.redo")} onPress={redo} />
+        <ToolButton icon={LayoutGrid} label={t("canvas.autoArrange")} onPress={runAutoLayout} />
         <ToolButton
           icon={Grid3x3}
           label={t("canvas.background")}
@@ -771,12 +872,26 @@ function CanvasInner({
                 ))}
                 <div className="my-1 h-px bg-border" />
                 <MenuItem
+                  icon={Workflow}
+                  label={t("canvas.workflowTemplates")}
+                  onSelect={() => {
+                    setTemplatesOpen(true);
+                    setMenu(null);
+                  }}
+                />
+                <div className="my-1 h-px bg-border" />
+                <MenuItem
                   icon={SquareDashed}
                   label={t("canvas.selectAll")}
                   onSelect={() => {
                     selectAll();
                     setMenu(null);
                   }}
+                />
+                <MenuItem
+                  icon={LayoutGrid}
+                  label={t("canvas.autoArrange")}
+                  onSelect={runAutoLayout}
                 />
                 <MenuItem
                   icon={Maximize}
@@ -824,6 +939,12 @@ function CanvasInner({
         }
       />
 
+      <WorkflowTemplateDialog
+        isOpen={templatesOpen}
+        onOpenChange={setTemplatesOpen}
+        onSelect={addTemplateAt}
+      />
+
       {/* Mounted only while open, so it refetches each time and its selection resets. */}
       {assetsOpen && <AssetLibraryDialog onOpenChange={setAssetsOpen} at={viewportCentre} />}
 
@@ -843,15 +964,18 @@ function ToolButton({
   onPress: () => void;
 }) {
   return (
-    <Button
-      size="icon-sm"
-      variant="ghost"
-      onPress={onPress}
-      aria-label={label}
-      className={cn("size-7")}
-    >
-      <Icon className="size-3.5" aria-hidden />
-    </Button>
+    <TooltipTrigger>
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        onPress={onPress}
+        aria-label={label}
+        className={cn("size-7")}
+      >
+        <Icon className="size-3.5" aria-hidden />
+      </Button>
+      <Tooltip>{label}</Tooltip>
+    </TooltipTrigger>
   );
 }
 

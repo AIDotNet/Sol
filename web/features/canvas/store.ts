@@ -19,6 +19,8 @@ import {
   type NodeExecution,
   type NodeKind,
 } from "@/features/canvas/types";
+import { autoLayoutNodes } from "@/features/canvas/layout";
+import type { CanvasTemplateDefinition } from "@/features/canvas/templates";
 
 /**
  * A canvas node.
@@ -62,6 +64,8 @@ interface CanvasState {
   onConnect: (connection: Connection) => void;
 
   addNode: (kind: NodeKind, position: { x: number; y: number }, data?: Partial<CanvasNodeData>) => string;
+  /** Adds a connected workflow starter as one undoable canvas edit. */
+  addTemplate: (template: CanvasTemplateDefinition, position: { x: number; y: number }) => string[];
   /**
    * Patches a node's data.
    *
@@ -83,6 +87,8 @@ interface CanvasState {
    */
   removeNodes: (ids: string[], options?: { history?: boolean }) => void;
   duplicateNode: (id: string) => void;
+  /** Arranges all nodes in one undoable graph edit. */
+  autoLayout: () => void;
   selectAll: () => void;
 
   setExecution: (id: string, execution: NodeExecution | undefined) => void;
@@ -241,6 +247,44 @@ export const useCanvasStore = create<CanvasState>((set, get) => {
       return id;
     },
 
+    addTemplate: (template, position) => {
+      pushHistory();
+
+      const ids = new Map(template.nodes.map((spec) => [spec.key, newId()]));
+      const createdNodes = template.nodes.map((spec) => {
+        const id = ids.get(spec.key)!;
+        const size = NODE_DEFAULT_SIZE[spec.kind];
+
+        return {
+          id,
+          type: spec.kind,
+          position: {
+            x: position.x + spec.position.x,
+            y: position.y + spec.position.y,
+          },
+          data: (spec.data ?? {}) as CanvasNode["data"],
+          width: size.width,
+          height: size.height,
+        };
+      });
+
+      const createdEdges = template.edges.flatMap((spec) => {
+        const source = ids.get(spec.source);
+        const target = ids.get(spec.target);
+        if (!source || !target) return [];
+
+        return [{ id: `e${newId()}`, source, target, type: "default" }];
+      });
+
+      set((state) => ({
+        nodes: [...state.nodes, ...createdNodes],
+        edges: [...state.edges, ...createdEdges],
+      }));
+      bump();
+
+      return createdNodes.map((node) => node.id);
+    },
+
     updateNodeData: (id, patch, options) => {
       if (options?.history === false) {
         // Not a user edit, so it neither takes an undo slot nor extends whatever burst was in
@@ -301,6 +345,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => {
           },
         ],
       }));
+      bump();
+    },
+
+    autoLayout: () => {
+      const { nodes, edges } = get();
+      if (nodes.length < 2) return;
+
+      const nextNodes = autoLayoutNodes(nodes, edges);
+      const changed = nextNodes.some(
+        (node, index) =>
+          node.position.x !== nodes[index].position.x || node.position.y !== nodes[index].position.y,
+      );
+      if (!changed) return;
+
+      pushHistory();
+      set({ nodes: nextNodes });
       bump();
     },
 

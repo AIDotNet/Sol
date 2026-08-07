@@ -22,7 +22,7 @@ Sol.Api             组合根 · SignalR Hub · HTTP 端点 · 中间件
 不含任何 I/O、任何框架类型。想在这里加包引用时，说明该类型其实属于 Application。
 
 ### Sol.Application
-定义**端口**（`IDeviceRepository`、`ICacheStore`、`IEventPublisher`、`IRealtimeNotifier`…）与**用例**（`ResolveDeviceIdentity`）。
+定义**端口**（`IDeviceRepository`、`ICacheStore`、`IEventPublisher`、`IRealtimeNotifier`…）与**用例**（`ResolveDeviceIdentity`）。账号端口还定义 provider-neutral 的 OAuth identity、session 和 account-device bridge。
 
 关键设计：端口签名里带 `JsonTypeInfo<T>`，使 AOT 错误的序列化路径在结构上不可达（见 [aot-constraints.md](aot-constraints.md)）。
 
@@ -56,6 +56,14 @@ Hub 是**交付机制**，等同 Controller，属最外层。另外 JSON hub pro
 | `IntegrationJsonContext` | `Sol.Infrastructure/Serialization/` | RabbitMQ 事件、Redis 缓存信封 |
 
 不能合一：Infrastructure 不允许引用 Api。共享的过线 DTO 放 `Sol.Application/Contracts/`，两个生成器都能看到。`TypeInfoResolverChain` 支持多个 resolver，组合无冲突。
+
+### 4. 账号作用域为何不把所有业务表改成 account_id
+
+业务表继续保留 `device_id`，兼容游客数据和现有仓储接口。登录后，API 在验证 session 与当前
+设备关联关系后，将 account id 写入本次数据库连接的 `sol.account_id` session setting。
+`sol_accessible_device_ids(device_id)` 再把当前设备扩展为账号明确关联的设备集合；没有有效账号
+session 时该函数只返回当前设备。这使账号访问具备跨设备能力，同时避免把账号权限误授给只持有
+旧设备 Cookie 的请求。
 
 ## 请求生命周期（设备握手）
 
@@ -96,7 +104,7 @@ src/Sol.Domain/Identity/          DeviceId, VisitorId, Device, DeviceLink, LinkC
 src/Sol.Application/
   Abstractions/{Persistence,Caching,Messaging,Realtime,Security,Common}/   端口
   Contracts/{Device,Realtime}/    过线 DTO（两个 JSON context 共享）
-  Features/Identity/              ResolveDeviceIdentity + Options + Validator
+  Features/Identity/              ResolveDeviceIdentity + AccountAuthService + Options + Validator
   Events/                         集成事件
 src/Sol.Infrastructure/
   Persistence/                    DapperModule, NpgsqlDataSourceFactory, 仓储, Migrations/

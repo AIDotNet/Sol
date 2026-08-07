@@ -36,4 +36,7 @@ public static class DeviceContextItems
 {
     public const string DeviceId = "sol.device_id";
     public const string VisitorId = "sol.visitor_id";
+    public const string AccountId = "sol.account_id";
+    public const string SessionAccountId = "sol.session_account_id";
+    public const string DeviceAccessBlocked = "sol.device_access_blocked";
 }

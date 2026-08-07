@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { checkMcpServer, type CreateMcpServerInput, type McpServer, type McpTransport } from "@/features/ai/api";
 import { isMcpRuntimeSupported } from "@/features/ai/protocol-support";
 import { useAiStore } from "@/features/ai/store";
@@ -173,14 +174,17 @@ function McpDetail({ server }: { server: McpServer }) {
           aria-label={server.enabled ? t("common.disable") : t("common.enable")}
         />
 
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label={t("common.delete")}
-          onPress={() => setDeleting(true)}
-        >
-          <Trash2 className="size-3.5" aria-hidden />
-        </Button>
+        <TooltipTrigger>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={t("common.delete")}
+            onPress={() => setDeleting(true)}
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+          </Button>
+          <Tooltip>{t("common.delete")}</Tooltip>
+        </TooltipTrigger>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">

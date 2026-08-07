@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Sol.Api.Hubs;
 using Sol.Api.Middleware;
+using Sol.Application.Abstractions.Persistence;
 using Sol.Application.Contracts.Device;
 using Sol.Application.Features.Identity;
 
@@ -32,6 +33,7 @@ public static class DeviceEndpoints
         DeviceSignalsPayload payload,
         HttpContext http,
         ResolveDeviceIdentity resolver,
+        IAccountRepository accounts,
         IValidator<DeviceSignalsPayload> validator,
         IHostEnvironment environment,
         CancellationToken ct)
@@ -53,6 +55,14 @@ public static class DeviceEndpoints
         // Re-issued on every handshake, including a probabilistic match, so the deterministic
         // layer takes over again as soon as possible and the weak fingerprint path stops mattering.
         DeviceCookie.Write(http, result.DeviceId, environment.IsDevelopment());
+
+        // A signed-in user can arrive in a new browser with only the session cookie. The
+        // handshake is the point at which that new deterministic device becomes an account
+        // device, after which all account-scoped repositories can see the cloud data.
+        if (http.GetAuthenticatedAccountId() is { } accountId)
+        {
+            await accounts.LinkDeviceAsync(accountId, result.DeviceId, ct);
+        }
 
         return TypedResults.Ok(new DeviceHandshakeResponse(
             result.DeviceId.ToString(),

@@ -238,6 +238,34 @@ test("a node context menu can duplicate and delete", async ({ page }) => {
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
 });
 
+test("nodes can be automatically arranged from the canvas toolbar", async ({ page }) => {
+  await establishDevice(page);
+  await page.goto("/");
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("button", { name: "文本节点" }).click();
+  await page.getByRole("button", { name: "图片生成" }).click();
+  await waitForSaved(page);
+
+  const before = await page.evaluate(() => {
+    const canvasId = localStorage.getItem("sol.canvas.current");
+    return canvasId ? localStorage.getItem(`sol.canvas.${canvasId}`) : null;
+  });
+  expect(before).not.toBeNull();
+
+  await page.getByRole("button", { name: "自动排列" }).click();
+  await waitForSaved(page);
+
+  const after = await page.evaluate(() => {
+    const canvasId = localStorage.getItem("sol.canvas.current");
+    return canvasId ? localStorage.getItem(`sol.canvas.${canvasId}`) : null;
+  });
+  expect(after).not.toBeNull();
+  expect(JSON.parse(after!).nodes.map((node: { position: { x: number; y: number } }) => node.position)).not.toEqual(
+    JSON.parse(before!).nodes.map((node: { position: { x: number; y: number } }) => node.position),
+  );
+});
+
 test("a chat provider's models are usable once its protocol has a client", async ({ page }) => {
   // Anthropic was configurable but unusable until the text clients landed. This asserts the
   // outcome users see: its models can be enabled, with no "not supported" marker.

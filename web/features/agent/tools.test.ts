@@ -110,4 +110,22 @@ describe("Agent canvas tools", () => {
       { nodeId: "missing", exists: false },
     ]);
   });
+
+  it("uses the graph-aware layout for the auto_layout canvas action", async () => {
+    const state = useCanvasStore.getState();
+    const source = state.addNode("text", { x: 500, y: 100 });
+    const target = state.addNode("image", { x: 0, y: 400 });
+    await executeCanvasTool(call("connect_nodes", { sourceId: source, targetId: target }));
+
+    const arranged = await executeCanvasTool(
+      call("manage_canvas", { action: "auto_layout" }),
+    );
+
+    expect(arranged.isError).toBe(false);
+    const nodes = useCanvasStore.getState().nodes;
+    expect(nodes.find((node) => node.id === source)!.position.x).toBeLessThan(
+      nodes.find((node) => node.id === target)!.position.x,
+    );
+    expect(result(arranged.json)).toMatchObject({ action: "auto_layout", nodeCount: 2 });
+  });
 });

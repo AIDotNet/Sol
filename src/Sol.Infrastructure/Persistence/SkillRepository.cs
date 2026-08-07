@@ -6,7 +6,7 @@ using Sol.Domain.Identity;
 
 namespace Sol.Infrastructure.Persistence;
 
-public sealed class SkillRepository(NpgsqlDataSource dataSource) : ISkillRepository
+public sealed class SkillRepository(SolConnectionFactory connections) : ISkillRepository
 {
     private const string Columns = """
         skill_id, device_id, slug, name, description, storage_path, enabled, has_scripts,
@@ -15,34 +15,34 @@ public sealed class SkillRepository(NpgsqlDataSource dataSource) : ISkillReposit
 
     public async Task<IReadOnlyList<Skill>> ListAsync(DeviceId deviceId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var rows = await connection.QueryAsync<SkillRow>(
-            $"SELECT {Columns} FROM skill WHERE device_id = @DeviceId ORDER BY name",
+            $"SELECT {Columns} FROM skill WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) ORDER BY name",
             new DeviceIdParam { DeviceId = deviceId.Value });
         return rows.Select(row => row.ToDomain()).ToList();
     }
 
     public async Task<Skill?> FindAsync(DeviceId deviceId, SkillId skillId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var row = await connection.QueryFirstOrDefaultAsync<SkillRow>(
-            $"SELECT {Columns} FROM skill WHERE skill_id = @SkillId AND device_id = @DeviceId",
+            $"SELECT {Columns} FROM skill WHERE skill_id = @SkillId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new SkillScopeParams { SkillId = skillId.Value, DeviceId = deviceId.Value });
         return row?.ToDomain();
     }
 
     public async Task<Skill?> FindBySlugAsync(DeviceId deviceId, string slug, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var row = await connection.QueryFirstOrDefaultAsync<SkillRow>(
-            $"SELECT {Columns} FROM skill WHERE slug = @Slug AND device_id = @DeviceId",
+            $"SELECT {Columns} FROM skill WHERE slug = @Slug AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new SkillSlugParams { Slug = slug, DeviceId = deviceId.Value });
         return row?.ToDomain();
     }
 
     public async Task<bool> InsertAsync(Skill skill, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var affected = await connection.ExecuteAsync(
             """
             INSERT INTO skill
@@ -59,9 +59,9 @@ public sealed class SkillRepository(NpgsqlDataSource dataSource) : ISkillReposit
 
     public async Task<bool> DeleteAsync(DeviceId deviceId, SkillId skillId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var affected = await connection.ExecuteAsync(
-            "DELETE FROM skill WHERE skill_id = @SkillId AND device_id = @DeviceId",
+            "DELETE FROM skill WHERE skill_id = @SkillId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new SkillScopeParams { SkillId = skillId.Value, DeviceId = deviceId.Value });
         return affected > 0;
     }

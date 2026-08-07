@@ -1,5 +1,5 @@
-import { render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Translate } from "@/components/providers/i18n-provider";
 import type { AgentContentBlock } from "@/features/agent/types";
 
@@ -7,9 +7,14 @@ vi.mock("@/components/providers/i18n-provider", () => ({
   useT: () => (key: string) => key,
 }));
 
-const { AssistantCard } = await import("@/features/agent/agent-panel");
+const { AgentPanel, AssistantCard } = await import("@/features/agent/agent-panel");
+const { useCanvasStore } = await import("@/features/canvas/store");
 
 const t: Translate = (key) => key;
+
+beforeEach(() => {
+  useCanvasStore.getState().reset();
+});
 
 describe("AssistantCard block order", () => {
   it("keeps text, tools, thinking, and later tools in their stored order", () => {
@@ -82,5 +87,37 @@ describe("AssistantCard block order", () => {
 
     expect(container.querySelector('[data-agent-block="tool"]')).not.toBeNull();
     expect(container.textContent).toContain("agent.toolRunning");
+  });
+});
+
+describe("AgentPanel selected nodes", () => {
+  it("shows the selected node count and details above the prompt input", () => {
+    useCanvasStore.getState().load({
+      nodes: [
+        {
+          id: "text-1",
+          type: "text",
+          position: { x: 0, y: 0 },
+          selected: true,
+          data: { text: "a warm sunrise" },
+        },
+        {
+          id: "image-1",
+          type: "image",
+          position: { x: 320, y: 0 },
+          selected: true,
+          data: { assetUrl: "/api/v1/canvas/assets/image" },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<AgentPanel />);
+
+    const selection = screen.getByTestId("agent-selected-nodes");
+    expect(selection).toHaveTextContent("agent.selectedNodes");
+    expect(selection).toHaveTextContent("canvas.nodeText");
+    expect(selection).toHaveTextContent("a warm sunrise");
+    expect(selection).toHaveTextContent("canvas.nodeImage");
   });
 });

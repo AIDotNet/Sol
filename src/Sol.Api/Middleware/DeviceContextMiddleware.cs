@@ -48,8 +48,29 @@ public static class DeviceContextMiddlewareExtensions
 
     /// <summary>Identity resolved for the current request, if the caller presented a cookie.</summary>
     public static DeviceId? GetDeviceId(this HttpContext context) =>
-        context.Items[DeviceContextItems.DeviceId] as DeviceId?;
+        context.Items[DeviceContextItems.DeviceAccessBlocked] is true
+            ? null
+            : context.Items[DeviceContextItems.DeviceId] is DeviceId deviceId
+                ? deviceId
+                : null;
 
     public static VisitorId? GetVisitorId(this HttpContext context) =>
-        context.Items[DeviceContextItems.VisitorId] as VisitorId?;
+        context.Items[DeviceContextItems.VisitorId] is VisitorId visitorId
+            ? visitorId
+            : null;
+
+    /// <summary>Returns the validated account session, even before its new device is linked.</summary>
+    public static AccountId? GetAuthenticatedAccountId(this HttpContext context) =>
+        context.Items[DeviceContextItems.SessionAccountId] is AccountId accountId
+            ? accountId
+            : null;
+
+    /// <summary>
+    /// Returns the account scope used by repositories. It is set only when the current device is
+    /// already linked to the validated session account.
+    /// </summary>
+    public static AccountId? GetAccountId(this HttpContext context) =>
+        context.Items[DeviceContextItems.AccountId] is AccountId accountId
+            ? accountId
+            : null;
 }

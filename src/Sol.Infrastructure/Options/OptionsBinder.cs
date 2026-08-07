@@ -72,6 +72,28 @@ internal static class OptionsBinder
         };
     }
 
+    public static AuthenticationOptions BindAuthentication(IConfiguration configuration)
+    {
+        var section = configuration.GetSection(AuthenticationOptions.SectionName);
+        var github = section.GetSection("GitHub");
+
+        return new AuthenticationOptions
+        {
+            PublicOrigin = section["PublicOrigin"] ?? "http://localhost:3000",
+            SessionCookieName = section["SessionCookieName"] ?? "sol_session",
+            SessionMaxAgeDays = Math.Clamp(ReadInt(section["SessionMaxAgeDays"], 30), 1, 365),
+            OAuthTransactionMinutes = Math.Clamp(
+                ReadInt(section["OAuthTransactionMinutes"], 10), 1, 30),
+            GitHub = new GitHubAuthenticationOptions
+            {
+                Enabled = ReadBool(github["Enabled"], false),
+                ClientId = github["ClientId"] ?? string.Empty,
+                ClientSecret = github["ClientSecret"] ?? string.Empty,
+                Scope = github["Scope"] ?? "read:user user:email",
+            },
+        };
+    }
+
     public static SkillsOptions BindSkills(IConfiguration configuration)
     {
         var section = configuration.GetSection(SkillsOptions.SectionName);

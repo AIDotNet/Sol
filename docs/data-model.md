@@ -4,10 +4,28 @@
 
 ```
 visitor 1 ──< device_link >── 1 device
+account 1 ──< account_device >── 1 device
+account 1 ──< external_identity
+account 1 ──< auth_session
               (可逆的边，带置信度)
 ```
 
 一个 `visitor` 代表"推测的同一台物理设备"，聚合一个或多个 `device`（浏览器profile）。第一台之外的成员关系都是**概率性**的。
+
+`account` 是用户主动通过第三方登录建立的身份。`account_device` 是明确授权边，不使用
+`visitor` 的概率关联；登录 session 有效且当前 device 在这张表中时，账号可以访问其全部
+关联设备数据。游客数据仍只按当前 `device_id` 过滤。
+
+### `sol_external_identity` — 第三方身份映射
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `provider_key` | `text` | `github`、未来的 `google` / `oidc-*` 等 |
+| `subject` | `text` | provider 返回的稳定用户 ID，不是 email |
+| `account_id` | `uuid` | 所属账号 |
+
+唯一约束是 `(provider_key, subject)`。不同 provider 的资料通过统一的 provider adapter
+归一化，禁止按 email 自动合并。
 
 ## 表
 
@@ -72,6 +90,22 @@ visitor 1 ──< device_link >── 1 device
 
 `canvas_asset.group_id` 是可空外键，删除分组时 `ON DELETE SET NULL`，因此分组删除不会
 删除或破坏素材。
+
+### `sol_asset_blob` / `sol_skill_file` — 云端二进制 payload
+
+媒体和 Skill 元数据仍分别保存在 `canvas_asset` / `skill`，但新写入的二进制内容不再依赖
+API 容器本地磁盘：
+
+- `sol_asset_blob.storage_path` 是 `cloud/<uuid>` 形式的 opaque key，保存媒体类型、`bytea`
+  payload 和创建时间；`canvas_asset.storage_path` 指向它。
+- `sol_skill_file` 以 `(storage_path, relative_path)` 为主键保存 Skill 包内文件；`skill.storage_path`
+  是设备 UUID 与 Skill UUID 的组合。
+- 资源仓储先按账号 session 将当前设备展开为账号明确关联的设备集合，再读取元数据；只有
+  元数据通过作用域检查后才会解析 payload key。游客仍只访问当前设备的数据。
+- `Ai:AssetRoot` 与 `Skills:Root` 仅作为迁移期间旧版本本地文件的读取/删除 fallback；新上传、
+  新生成和新安装的数据默认进入上述 PostgreSQL 表。
+
+数据库备份因此包含业务元数据和新二进制内容，恢复 PostgreSQL 即可恢复云端数据。
 
 ## 索引
 

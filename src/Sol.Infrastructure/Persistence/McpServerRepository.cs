@@ -11,7 +11,7 @@ namespace Sol.Infrastructure.Persistence;
 /// jsonb in SQL. Npgsql's <c>EnableDynamicJson</c> is unavailable under AOT, so the conversion
 /// stays explicit rather than relying on a runtime type mapper.
 /// </remarks>
-public sealed class McpServerRepository(NpgsqlDataSource dataSource) : IMcpServerRepository
+public sealed class McpServerRepository(SolConnectionFactory connections) : IMcpServerRepository
 {
     private const string Columns = """
         server_id, device_id, name, description, enabled, transport, command,
@@ -21,13 +21,13 @@ public sealed class McpServerRepository(NpgsqlDataSource dataSource) : IMcpServe
 
     public async Task<IReadOnlyList<McpServer>> ListAsync(DeviceId deviceId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var rows = await connection.QueryAsync<McpServerRow>(
             $"""
             SELECT {Columns}
             FROM mcp_server
-            WHERE device_id = @DeviceId
+            WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             ORDER BY created_at
             """,
             new DeviceIdParam { DeviceId = deviceId.Value });
@@ -40,13 +40,13 @@ public sealed class McpServerRepository(NpgsqlDataSource dataSource) : IMcpServe
         McpServerId serverId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var row = await connection.QueryFirstOrDefaultAsync<McpServerRow>(
             $"""
             SELECT {Columns}
             FROM mcp_server
-            WHERE server_id = @ServerId AND device_id = @DeviceId
+            WHERE server_id = @ServerId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new McpScopeParam { ServerId = serverId.Value, DeviceId = deviceId.Value });
 
@@ -55,7 +55,7 @@ public sealed class McpServerRepository(NpgsqlDataSource dataSource) : IMcpServe
 
     public async Task InsertAsync(McpServer server, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         await InsertCoreAsync(connection, server, onConflictDoNothing: false);
     }
 
@@ -68,7 +68,7 @@ public sealed class McpServerRepository(NpgsqlDataSource dataSource) : IMcpServe
             return 0;
         }
 
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var added = 0;
         foreach (var server in servers)
@@ -118,7 +118,7 @@ public sealed class McpServerRepository(NpgsqlDataSource dataSource) : IMcpServe
 
     public async Task UpdateAsync(McpServer server, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         await connection.ExecuteAsync(
             """
@@ -128,7 +128,7 @@ public sealed class McpServerRepository(NpgsqlDataSource dataSource) : IMcpServe
                 env = @EnvJson::jsonb, cwd = @Cwd, url = @Url,
                 headers = @HeadersJson::jsonb, auto_fallback = @AutoFallback,
                 updated_at = @UpdatedAt
-            WHERE server_id = @ServerId AND device_id = @DeviceId
+            WHERE server_id = @ServerId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new UpdateMcpParams
             {
@@ -154,10 +154,10 @@ public sealed class McpServerRepository(NpgsqlDataSource dataSource) : IMcpServe
         McpServerId serverId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var affected = await connection.ExecuteAsync(
-            "DELETE FROM mcp_server WHERE server_id = @ServerId AND device_id = @DeviceId",
+            "DELETE FROM mcp_server WHERE server_id = @ServerId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new McpScopeParam { ServerId = serverId.Value, DeviceId = deviceId.Value });
 
         return affected > 0;

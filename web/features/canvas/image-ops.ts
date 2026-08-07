@@ -21,6 +21,9 @@ export interface CropRect {
   height: number;
 }
 
+/** Maximum edge accepted by a user-requested resize, keeping canvas memory bounded. */
+export const MAX_IMAGE_EDGE = 8192;
+
 /**
  * Loads an image for canvas work.
  *
@@ -124,9 +127,6 @@ export async function flipImage(
   return toBlob(canvas, mediaType);
 }
 
-/** Largest edge an upscale may produce, so a 4× on a big image cannot exhaust memory. */
-const MAX_UPSCALE_EDGE = 8192;
-
 export async function upscaleImage(
   url: string,
   factor: number,
@@ -136,12 +136,39 @@ export async function upscaleImage(
 
   const clamped = Math.min(
     factor,
-    MAX_UPSCALE_EDGE / Math.max(image.naturalWidth, image.naturalHeight),
+    MAX_IMAGE_EDGE / Math.max(image.naturalWidth, image.naturalHeight),
   );
   const scale = Math.max(1, clamped);
 
   const [canvas, ctx] = context(image.naturalWidth * scale, image.naturalHeight * scale);
   ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  return toBlob(canvas, mediaType);
+}
+
+/** Resizes to an explicit target size and returns a new image without changing the source node. */
+export async function resizeImage(
+  url: string,
+  width: number,
+  height: number,
+  mediaType = "image/png",
+): Promise<Blob> {
+  const targetWidth = Math.round(width);
+  const targetHeight = Math.round(height);
+  if (
+    !Number.isFinite(targetWidth)
+    || !Number.isFinite(targetHeight)
+    || targetWidth < 1
+    || targetHeight < 1
+    || targetWidth > MAX_IMAGE_EDGE
+    || targetHeight > MAX_IMAGE_EDGE
+  ) {
+    throw new Error("The requested image size is not supported.");
+  }
+
+  const image = await load(url);
+  const [canvas, ctx] = context(targetWidth, targetHeight);
+  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
 
   return toBlob(canvas, mediaType);
 }

@@ -24,6 +24,16 @@ const PROVIDER_SLUG_OVERRIDES: Record<string, string> = {
 };
 
 /**
+ * Provider assets that are not part of the SVG icon package.
+ *
+ * Keep these keyed by the resolved slug so provider fallbacks used by model icons get the same
+ * asset as the provider itself.
+ */
+const ICON_PATH_OVERRIDES: Record<string, string> = {
+  "routin-ai": "/routin-ai.webp",
+};
+
+/**
  * Infers a brand icon from a model identifier.
  *
  * Models discovered through a provider's /v1/models carry no icon metadata, so this gives them
@@ -92,7 +102,7 @@ function SlugIcon({
 
   return (
     <Image
-      src={`/provider-icons/${slug}.svg`}
+      src={ICON_PATH_OVERRIDES[slug] ?? `/provider-icons/${slug}.svg`}
       alt={alt}
       width={size}
       height={size}

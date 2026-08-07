@@ -6,10 +6,11 @@ using Npgsql;
 using Sol.Application.Abstractions.Caching;
 using Sol.Application.Abstractions.Ai;
 using Sol.Application.Abstractions.Common;
+using Sol.Application.Abstractions.Identity;
 using Sol.Application.Abstractions.Messaging;
 using Sol.Application.Abstractions.Persistence;
-using Sol.Application.Abstractions.Realtime;
 using Sol.Application.Abstractions.Security;
+using Sol.Application.Abstractions.Realtime;
 using Sol.Application.Contracts.Device;
 using Sol.Application.Features.Agent;
 using Sol.Application.Features.Identity;
@@ -19,6 +20,7 @@ using Sol.Infrastructure.Ai.Mcp;
 using Sol.Infrastructure.Caching;
 using Sol.Infrastructure.Common;
 using Sol.Infrastructure.Health;
+using Sol.Infrastructure.Identity;
 using Sol.Infrastructure.Messaging;
 using Sol.Infrastructure.Options;
 using Sol.Infrastructure.Persistence;
@@ -44,6 +46,8 @@ public static class DependencyInjection
             Microsoft.Extensions.Options.Options.Create(OptionsBinder.BindRabbitMq(configuration)));
         services.AddSingleton<IOptions<DeviceIdentityOptions>>(
             Microsoft.Extensions.Options.Options.Create(OptionsBinder.BindDeviceIdentity(configuration)));
+        services.AddSingleton<IOptions<AuthenticationOptions>>(
+            Microsoft.Extensions.Options.Options.Create(OptionsBinder.BindAuthentication(configuration)));
 
         var skillsOptions = OptionsBinder.BindSkills(configuration);
         services.AddSingleton<IOptions<SkillsOptions>>(
@@ -87,6 +91,9 @@ public static class DependencyInjection
             return NpgsqlDataSourceFactory.Create(options.ConnectionString);
         });
 
+        services.AddScoped<IAccountContext, AccountContext>();
+        services.AddScoped<SolConnectionFactory>();
+        services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
         services.AddScoped<IVisitorRepository, VisitorRepository>();
         services.AddScoped<IProviderRepository, ProviderRepository>();
@@ -117,7 +124,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IUpstreamModelCatalog, UpstreamModelCatalog>();
 
-        services.AddSingleton<IAssetStore, FileSystemAssetStore>();
+        services.AddSingleton<FileSystemAssetStore>();
+        services.AddSingleton<IAssetStore, CloudAssetStore>();
 
         // One client per protocol. The dispatcher indexes them by ProviderType, so a new vendor
         // is a registration here rather than an edit to a switch.
@@ -139,7 +147,8 @@ public static class DependencyInjection
         services.AddSingleton<IMcpNetworkGuard, McpNetworkGuard>();
         services.AddSingleton<IMcpRuntime, McpRuntime>();
         services.AddSingleton<ISkillPackageScanner, ZipSkillScanner>();
-        services.AddSingleton<ISkillStore, FileSystemSkillStore>();
+        services.AddSingleton<FileSystemSkillStore>();
+        services.AddSingleton<ISkillStore, CloudSkillStore>();
         services.AddSingleton<ISkillScriptRunner, UnixSocketSkillScriptRunner>();
 
         services.AddSingleton<IAgentModelClient, AnthropicAgentClient>();
@@ -197,6 +206,14 @@ public static class DependencyInjection
         services.AddSingleton<IFingerprintHasher, Sha256FingerprintHasher>();
         services.AddSingleton<IIpPrefixExtractor, IpPrefixExtractor>();
         services.AddScoped<ResolveDeviceIdentity>();
+        services.AddScoped<AccountAuthService>();
+
+        services.AddHttpClient("github-oauth", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddSingleton<IExternalLoginProvider, GitHubExternalLoginProvider>();
+        services.AddSingleton<IExternalLoginProviderRegistry, ExternalLoginProviderRegistry>();
 
         // Explicit registration: AddValidatorsFromAssembly* scans by reflection and finds
         // nothing under AOT, disabling validation without any error.

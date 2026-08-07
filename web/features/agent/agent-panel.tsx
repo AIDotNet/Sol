@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModelIcon } from "@/features/ai/provider-icons";
 import { uploadAsset } from "@/features/ai/api";
 import { resolveSlot, useAiStore } from "@/features/ai/store";
@@ -41,6 +42,7 @@ import {
   type AgentLiveToolCall,
   type AgentMessage,
 } from "@/features/agent/types";
+import { useCanvasStore, type CanvasNode } from "@/features/canvas/store";
 
 const AGENT_PROTOCOLS = new Set(["anthropic", "openai-chat", "openai-responses"]);
 const MAX_AGENT_IMAGES = 8;
@@ -117,6 +119,7 @@ function ModelCapabilityBadges({
 
 export function AgentPanel() {
   const t = useT();
+  const canvasNodes = useCanvasStore((state) => state.nodes);
   const providers = useAiStore((state) => state.providers);
   const slots = useAiStore((state) => state.slots);
   const setOpen = useAgentStore((state) => state.setOpen);
@@ -213,6 +216,10 @@ export function AgentPanel() {
     }
     return [...groups.values()];
   }, [models]);
+  const selectedNodeSummaries = useMemo(
+    () => canvasNodes.filter((node) => node.selected).map((node) => summarizeSelectedNode(node, t)),
+    [canvasNodes, t],
+  );
 
   function submit() {
     if (!canSend || !selected) return;
@@ -282,27 +289,33 @@ export function AgentPanel() {
                 {run ? statusLabel(run.status, t) : t("agent.ready")}
               </p>
             </div>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              onPress={clearConversation}
-              isDisabled={clearing || active || sending || messages.length === 0}
-              aria-label={t("agent.clear")}
-            >
-              {clearing ? (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              ) : (
-                <Trash2 className="size-3.5" aria-hidden />
-              )}
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              onPress={() => setOpen(false)}
-              aria-label={t("common.close")}
-            >
-              <X className="size-3.5" aria-hidden />
-            </Button>
+            <TooltipTrigger>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                onPress={clearConversation}
+                isDisabled={clearing || active || sending || messages.length === 0}
+                aria-label={t("agent.clear")}
+              >
+                {clearing ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Trash2 className="size-3.5" aria-hidden />
+                )}
+              </Button>
+              <Tooltip>{t("agent.clear")}</Tooltip>
+            </TooltipTrigger>
+            <TooltipTrigger>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                onPress={() => setOpen(false)}
+                aria-label={t("common.close")}
+              >
+                <X className="size-3.5" aria-hidden />
+              </Button>
+              <Tooltip>{t("common.close")}</Tooltip>
+            </TooltipTrigger>
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-live="polite">
@@ -377,6 +390,31 @@ export function AgentPanel() {
             />
 
             <div className="rounded-xl border bg-background p-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
+              {selectedNodeSummaries.length > 1 && (
+                <div
+                  data-testid="agent-selected-nodes"
+                  className="mb-2 border-b border-border/70 pb-2"
+                  aria-label={t("agent.selectedNodes", { count: selectedNodeSummaries.length })}
+                >
+                  <p className="text-[0.625rem] font-medium text-muted-foreground">
+                    {t("agent.selectedNodes", { count: selectedNodeSummaries.length })}
+                  </p>
+                  <div className="mt-1.5 flex max-h-16 flex-wrap gap-1 overflow-y-auto">
+                    {selectedNodeSummaries.map((node) => (
+                      <span
+                        key={node.id}
+                        title={node.detail ? `${node.typeLabel}: ${node.detail}` : node.typeLabel}
+                        className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted/70 px-1.5 py-1 text-[0.625rem]"
+                      >
+                        <span className="shrink-0 font-medium text-foreground">{node.typeLabel}</span>
+                        {node.detail && (
+                          <span className="min-w-0 truncate text-muted-foreground">{node.detail}</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <Textarea
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
@@ -401,15 +439,18 @@ export function AgentPanel() {
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={image.url} alt={image.name} className="size-full object-cover" />
-                      <Button
-                        size="icon-xs"
-                        variant="destructive"
-                        className="absolute top-0.5 right-0.5 size-4 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                        onPress={() => removeAttachment(image.id)}
-                        aria-label={t("agent.removeImage")}
-                      >
-                        <X className="size-2.5" aria-hidden />
-                      </Button>
+                      <TooltipTrigger>
+                        <Button
+                          size="icon-xs"
+                          variant="destructive"
+                          className="absolute top-0.5 right-0.5 size-4 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                          onPress={() => removeAttachment(image.id)}
+                          aria-label={t("agent.removeImage")}
+                        >
+                          <X className="size-2.5" aria-hidden />
+                        </Button>
+                        <Tooltip>{t("agent.removeImage")}</Tooltip>
+                      </TooltipTrigger>
                     </div>
                   ))}
                 </div>
@@ -504,19 +545,22 @@ export function AgentPanel() {
                     {t("agent.stop")}
                   </Button>
                 ) : (
-                  <Button
-                    size="icon-sm"
-                    className="rounded-full"
-                    onPress={submit}
-                    isDisabled={!canSend}
-                    aria-label={t("agent.send")}
-                  >
-                    {sending ? (
-                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                    ) : (
-                      <ArrowUp className="size-3.5" aria-hidden />
-                    )}
-                  </Button>
+                  <TooltipTrigger>
+                    <Button
+                      size="icon-sm"
+                      className="rounded-full"
+                      onPress={submit}
+                      isDisabled={!canSend}
+                      aria-label={t("agent.send")}
+                    >
+                      {sending ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <ArrowUp className="size-3.5" aria-hidden />
+                      )}
+                    </Button>
+                    <Tooltip>{t("agent.send")}</Tooltip>
+                  </TooltipTrigger>
                 )}
               </div>
             </div>
@@ -923,6 +967,46 @@ function formatPayload(value: string): string {
   } catch {
     return value.length > 2_000 ? value.slice(0, 2_000) + "…" : value;
   }
+}
+
+interface SelectedNodeSummary {
+  id: string;
+  typeLabel: string;
+  detail?: string;
+}
+
+function summarizeSelectedNode(
+  node: CanvasNode,
+  t: ReturnType<typeof useT>,
+): SelectedNodeSummary {
+  const data = node.data as Record<string, unknown>;
+  const typeLabel = (() => {
+    switch (node.type) {
+      case "image":
+        return t("canvas.nodeImage");
+      case "video":
+        return t("canvas.nodeVideo");
+      case "imageGen":
+        return t("canvas.nodeImageGen");
+      case "videoGen":
+        return t("canvas.nodeVideoGen");
+      default:
+        return t("canvas.nodeText");
+    }
+  })();
+
+  const detail = node.type === "text" || node.type === "image" || node.type === "video"
+    ? compactNodeText(data.text ?? data.prompt)
+    : compactNodeText(data.modelId);
+
+  return { id: node.id, typeLabel, detail };
+}
+
+function compactNodeText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const compact = value.trim().replace(/\s+/g, " ");
+  if (!compact) return undefined;
+  return compact.length > 72 ? `${compact.slice(0, 72)}…` : compact;
 }
 
 function statusLabel(

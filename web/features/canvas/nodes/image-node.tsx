@@ -4,6 +4,8 @@ import { type NodeProps, NodeResizer, useReactFlow } from "@xyflow/react";
 import {
   AlertTriangle,
   Brush,
+  Check,
+  Copy,
   Download,
   Expand,
   FlipHorizontal,
@@ -15,11 +17,12 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/providers/i18n-provider";
-import { Button } from "@/components/ui/button";
 import { uploadAsset } from "@/features/ai/api";
+import { copyImageToClipboard } from "@/features/canvas/canvas-interactions";
 import { cancelRun, retryRun } from "@/features/canvas/execution";
-import { NodeShell } from "@/features/canvas/nodes/node-shell";
+import { NodeActionButton, NodeShell } from "@/features/canvas/nodes/node-shell";
 import { MaskEditorDialog } from "@/features/canvas/nodes/mask-editor-dialog";
+import { ResizeImageDialog } from "@/features/canvas/nodes/resize-image-dialog";
 import { useImageEdit } from "@/features/canvas/nodes/use-image-edit";
 import { useCanvasStore } from "@/features/canvas/store";
 import { type ImageNodeData, NODE_MIN_SIZE } from "@/features/canvas/types";
@@ -41,6 +44,10 @@ export function ImageNode({ id, data, selected }: NodeProps) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [copying, setCopying] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Optimistic object URL, revoked once the upload resolves or the node unmounts. */
   const previewRef = useRef<string | null>(null);
@@ -49,6 +56,7 @@ export function ImageNode({ id, data, selected }: NodeProps) {
   useEffect(
     () => () => {
       if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
     },
     [],
   );
@@ -56,6 +64,7 @@ export function ImageNode({ id, data, selected }: NodeProps) {
   const nodeData = data as ImageNodeData;
   const edit = useImageEdit(id, nodeData.assetUrl);
   const [masking, setMasking] = useState(false);
+  const [resizing, setResizing] = useState(false);
 
   function releasePreview() {
     if (previewRef.current) {
@@ -89,6 +98,32 @@ export function ImageNode({ id, data, selected }: NodeProps) {
     }
   }
 
+  async function copyImage() {
+    if (!nodeData.assetUrl || copying) return;
+
+    if (copiedTimerRef.current) {
+      clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = null;
+    }
+
+    setCopying(true);
+    setCopied(false);
+    setCopyError(null);
+
+    try {
+      await copyImageToClipboard(nodeData.assetUrl, nodeData.mediaType);
+      setCopied(true);
+      copiedTimerRef.current = setTimeout(() => {
+        copiedTimerRef.current = null;
+        setCopied(false);
+      }, 1800);
+    } catch {
+      setCopyError(t("node.copyFailed"));
+    } finally {
+      setCopying(false);
+    }
+  }
+
   const shown = nodeData.assetUrl ?? preview;
 
   return (
@@ -111,67 +146,84 @@ export function ImageNode({ id, data, selected }: NodeProps) {
         actions={
           nodeData.assetUrl ? (
             <>
-              <Button
+              <NodeActionButton
                 size="icon-xs"
                 variant="ghost"
                 className="size-5"
-                aria-label={t("node.maskEdit")}
+                label={t("node.maskEdit")}
                 onPress={() => setMasking(true)}
               >
                 <Brush className="size-2.5" aria-hidden />
-              </Button>
+              </NodeActionButton>
 
-              <Button
+              <NodeActionButton
                 size="icon-xs"
                 variant="ghost"
                 className="size-5"
                 isDisabled={edit.busy}
-                aria-label={t("node.rotate")}
+                label={t("node.rotate")}
                 onPress={() => void edit.rotate(1)}
               >
                 <RotateCw className="size-2.5" aria-hidden />
-              </Button>
+              </NodeActionButton>
 
-              <Button
+              <NodeActionButton
                 size="icon-xs"
                 variant="ghost"
                 className="size-5"
                 isDisabled={edit.busy}
-                aria-label={t("node.flip")}
+                label={t("node.flip")}
                 onPress={() => void edit.flip("horizontal")}
               >
                 <FlipHorizontal className="size-2.5" aria-hidden />
-              </Button>
+              </NodeActionButton>
 
-              <Button
+              <NodeActionButton
                 size="icon-xs"
                 variant="ghost"
                 className="size-5"
                 isDisabled={edit.busy}
-                aria-label={t("node.upscale")}
-                onPress={() => void edit.upscale(2)}
+                label={t("node.resize")}
+                onPress={() => setResizing(true)}
               >
                 <Maximize2 className="size-2.5" aria-hidden />
-              </Button>
+              </NodeActionButton>
 
-              <Button
+              <NodeActionButton
                 size="icon-xs"
                 variant="ghost"
                 className="size-5"
                 isDisabled={edit.busy}
-                aria-label={t("node.expand")}
+                label={t("node.expand")}
                 onPress={() =>
                   void edit.expand({ top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 })
                 }
               >
                 <Expand className="size-2.5" aria-hidden />
-              </Button>
+              </NodeActionButton>
 
-              <Button
+              <NodeActionButton
                 size="icon-xs"
                 variant="ghost"
                 className="size-5"
-                aria-label={t("common.download")}
+                isDisabled={copying}
+                label={copied ? t("common.copied") : t("common.copy")}
+                onPress={() => void copyImage()}
+              >
+                {copying ? (
+                  <Loader2 className="size-2.5 animate-spin" aria-hidden />
+                ) : copied ? (
+                  <Check className="size-2.5 text-emerald-600" aria-hidden />
+                ) : (
+                  <Copy className="size-2.5" aria-hidden />
+                )}
+              </NodeActionButton>
+
+              <NodeActionButton
+                size="icon-xs"
+                variant="ghost"
+                className="size-5"
+                label={t("common.download")}
                 onPress={() => {
                   const link = document.createElement("a");
                   link.href = nodeData.assetUrl!;
@@ -180,7 +232,7 @@ export function ImageNode({ id, data, selected }: NodeProps) {
                 }}
               >
                 <Download className="size-2.5" aria-hidden />
-              </Button>
+              </NodeActionButton>
             </>
           ) : null
         }
@@ -236,11 +288,11 @@ export function ImageNode({ id, data, selected }: NodeProps) {
           />
         </div>
 
-        {(uploadError || edit.error) && (
+        {(uploadError || copyError || edit.error) && (
           <div className="nodrag flex shrink-0 items-start gap-1.5 border-t bg-destructive/5 px-2 py-1.5">
             <AlertTriangle className="mt-px size-3 shrink-0 text-destructive" aria-hidden />
             <p className="min-w-0 flex-1 text-[0.625rem] leading-tight text-destructive">
-              {uploadError ?? edit.error}
+              {uploadError ?? copyError ?? edit.error}
             </p>
           </div>
         )}
@@ -252,6 +304,16 @@ export function ImageNode({ id, data, selected }: NodeProps) {
           onOpenChange={setMasking}
           nodeId={id}
           sourceUrl={nodeData.assetUrl}
+        />
+      )}
+
+      {resizing && nodeData.assetUrl && (
+        <ResizeImageDialog
+          key={nodeData.assetUrl}
+          onOpenChange={setResizing}
+          sourceUrl={nodeData.assetUrl}
+          error={edit.error}
+          onResize={edit.resize}
         />
       )}
     </>

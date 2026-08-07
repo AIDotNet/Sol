@@ -4,6 +4,7 @@ import { Handle, Position } from "@xyflow/react";
 import { AlertTriangle, Loader2, Square } from "lucide-react";
 import { useT } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import type { NodeExecution } from "@/features/canvas/types";
 import { cn } from "@/lib/utils";
 
@@ -140,3 +141,20 @@ export function NodeShell({
     </div>
   );
 }
+
+/**
+ * An icon-only action button in a node's header, with a tooltip carrying the label that would
+ * otherwise only reach a screen reader — the node body is too cramped for visible text.
+ */
+export function NodeActionButton({
+  label,
+  ...props
+}: React.ComponentProps<typeof Button> & { label: string }) {
+  return (
+    <TooltipTrigger>
+      <Button aria-label={label} {...props} />
+      <Tooltip>{label}</Tooltip>
+    </TooltipTrigger>
+  );
+}
+

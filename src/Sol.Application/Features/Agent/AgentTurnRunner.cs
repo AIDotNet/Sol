@@ -953,7 +953,7 @@ public sealed class AgentTurnRunner(
             var asset = await assets.FindAsync(deviceId, assetId, ct);
             if (asset is null || asset.Kind != "image") continue;
 
-            await using var stream = assetStore.OpenRead(asset.StoragePath);
+            await using var stream = await assetStore.OpenReadAsync(asset.StoragePath, ct);
             if (stream is null) continue;
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer, ct);

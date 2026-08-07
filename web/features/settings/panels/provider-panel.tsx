@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import * as api from "@/features/ai/api";
 import { findPreset, presetRequiresApiKey } from "@/features/ai/presets";
 import { ModelIcon, ProviderIcon } from "@/features/ai/provider-icons";
@@ -357,14 +358,17 @@ function ProviderDetail({ provider }: { provider: AiProvider }) {
           aria-label={provider.enabled ? t("common.disable") : t("common.enable")}
         />
 
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label={t("common.delete")}
-          onPress={() => setDeletingProvider(true)}
-        >
-          <Trash2 className="size-3.5" aria-hidden />
-        </Button>
+        <TooltipTrigger>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={t("common.delete")}
+            onPress={() => setDeletingProvider(true)}
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+          </Button>
+          <Tooltip>{t("common.delete")}</Tooltip>
+        </TooltipTrigger>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-5">
@@ -384,14 +388,17 @@ function ProviderDetail({ provider }: { provider: AiProvider }) {
                   aria-label={t("provider.apiKey")}
                   className="pr-8"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowKey((value) => !value)}
-                  className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showKey ? "Hide" : "Show"}
-                >
-                  {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                </button>
+                <TooltipTrigger>
+                  <button
+                    type="button"
+                    onClick={() => setShowKey((value) => !value)}
+                    className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={showKey ? "Hide" : "Show"}
+                  >
+                    {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                  </button>
+                  <Tooltip>{showKey ? "Hide" : "Show"}</Tooltip>
+                </TooltipTrigger>
               </div>
 
               <Button
@@ -498,9 +505,12 @@ function ProviderDetail({ provider }: { provider: AiProvider }) {
                 )}
                 {fetching ? t("provider.fetching") : t("provider.fetchModels")}
               </Button>
-              <Button size="icon-sm" variant="outline" onPress={() => setEditingModel("new")} aria-label={t("provider.addModel")}>
-                <Plus className="size-3.5" aria-hidden />
-              </Button>
+              <TooltipTrigger>
+                <Button size="icon-sm" variant="outline" onPress={() => setEditingModel("new")} aria-label={t("provider.addModel")}>
+                  <Plus className="size-3.5" aria-hidden />
+                </Button>
+                <Tooltip>{t("provider.addModel")}</Tooltip>
+              </TooltipTrigger>
             </div>
           }
         >
@@ -571,23 +581,29 @@ function ProviderDetail({ provider }: { provider: AiProvider }) {
                           aria-label={model.name}
                         />
 
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          onPress={() => setEditingModel(model.id)}
-                          aria-label={t("common.edit")}
-                        >
-                          <Search className="size-3" aria-hidden />
-                        </Button>
+                        <TooltipTrigger>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            onPress={() => setEditingModel(model.id)}
+                            aria-label={t("common.edit")}
+                          >
+                            <Search className="size-3" aria-hidden />
+                          </Button>
+                          <Tooltip>{t("common.edit")}</Tooltip>
+                        </TooltipTrigger>
 
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label={t("common.delete")}
-                          onPress={() => setDeletingModelId(model.id)}
-                        >
-                          <Trash2 className="size-3" aria-hidden />
-                        </Button>
+                        <TooltipTrigger>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label={t("common.delete")}
+                            onPress={() => setDeletingModelId(model.id)}
+                          >
+                            <Trash2 className="size-3" aria-hidden />
+                          </Button>
+                          <Tooltip>{t("common.delete")}</Tooltip>
+                        </TooltipTrigger>
                       </div>
                     );
                   })}

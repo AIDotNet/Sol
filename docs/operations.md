@@ -58,9 +58,9 @@ OpenTelemetry 1.17.0，OTLP exporter **仅在配置了 endpoint 时启用**，�
 | `DeviceIdentity:MaxCoarseFanout` | 概率关联的基数上限，默认 5 |
 | `DeviceIdentity:CoarseWindowHours` | 候选时间窗，默认 24 |
 | `Ai:EncryptionKey` | **密钥**，base64 编码的 32 字节，加密渠道 API Key |
-| `Ai:AssetRoot` | 生成的图片/视频落盘目录，默认 `./storage/assets` |
+| `Ai:AssetRoot` | 旧版本生成图片/视频的本地兼容目录，默认 `./storage/assets`；新媒体默认写入 PostgreSQL blob |
 | `Ai:RequestTimeoutSeconds` | 上游生成请求超时，默认 1200，绑定时最低 600 |
-| `Skills:Root` | 已安装 Skill 文件根目录，默认 `./storage/skills` |
+| `Skills:Root` | 旧版本已安装 Skill 文件的兼容读取目录，默认 `./storage/skills`；新 Skill 文件写入 PostgreSQL |
 | `Skills:MaxUploadBytes` / `MaxExtractedBytes` / `MaxEntries` | Skill 包边界 |
 | `Skills:RunnerSocketPath` | Sol.Api 到隔离 runner 的 Unix socket |
 | `Skills:RunnerTimeoutSeconds` | 脚本最长时限，默认 30，最大 120 |
@@ -76,7 +76,10 @@ OpenTelemetry 1.17.0，OTLP exporter **仅在配置了 endpoint 时启用**，�
 
 未配置该项时进程**启动即失败**，而不是在第一次保存 Key 时才报错——密钥缺失属于配置错误，应该在部署时暴露。
 
-**资产目录**：`Ai:AssetRoot` 下的文件是画布节点引用的实际图片与视频，数据库只存路径。该目录需要与数据库一起备份；单独恢复数据库会得到一批指向不存在文件的资产行（接口会返回 404，不会崩溃）。
+**云端资产**：新上传和生成的图片/视频，以及新安装的 Skill 文件，都写入 PostgreSQL 的
+`sol_asset_blob` / `sol_skill_file`。因此数据库备份包含业务元数据和二进制 payload，恢复数据库
+即可恢复云端数据。`Ai:AssetRoot` 仍用于读取旧版本本地资产；迁移期间要保留它，迁移完成后可以
+归档并删除旧目录。
 
 **视频任务轮询是单实例假设**：`VideoJobPoller` 是一个 `BackgroundService`，每 5 秒取一批 `pending`/`running` 的任务推进。**多副本部署时每个实例都会轮询同一批任务**——上游会被重复查询，完成时也可能重复下载同一个视频。要横向扩容需要 `SELECT ... FOR UPDATE SKIP LOCKED` 或选主，目前未实现。单实例下行为正确。
 

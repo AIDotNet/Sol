@@ -5,7 +5,7 @@ using Sol.Domain.Identity;
 
 namespace Sol.Infrastructure.Persistence;
 
-public sealed class VideoJobRepository(NpgsqlDataSource dataSource) : IVideoJobRepository
+public sealed class VideoJobRepository(SolConnectionFactory connections) : IVideoJobRepository
 {
     private const string Columns = """
         job_id, device_id, provider_id, model_key, status, upstream_job_id,
@@ -14,7 +14,7 @@ public sealed class VideoJobRepository(NpgsqlDataSource dataSource) : IVideoJobR
 
     public async Task InsertAsync(VideoJob job, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         await connection.ExecuteAsync(
             """
@@ -44,10 +44,10 @@ public sealed class VideoJobRepository(NpgsqlDataSource dataSource) : IVideoJobR
 
     public async Task<VideoJob?> FindAsync(DeviceId deviceId, Guid jobId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var row = await connection.QueryFirstOrDefaultAsync<VideoJobRow>(
-            $"SELECT {Columns} FROM video_job WHERE job_id = @JobId AND device_id = @DeviceId",
+            $"SELECT {Columns} FROM video_job WHERE job_id = @JobId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new VideoJobScopeParams { JobId = jobId, DeviceId = deviceId.Value });
 
         return row?.ToDomain();
@@ -55,7 +55,7 @@ public sealed class VideoJobRepository(NpgsqlDataSource dataSource) : IVideoJobR
 
     public async Task<VideoJob?> FindByIdAsync(Guid jobId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var row = await connection.QueryFirstOrDefaultAsync<VideoJobRow>(
             $"SELECT {Columns} FROM video_job WHERE job_id = @JobId",
@@ -66,7 +66,7 @@ public sealed class VideoJobRepository(NpgsqlDataSource dataSource) : IVideoJobR
 
     public async Task UpdateAsync(VideoJob job, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         await connection.ExecuteAsync(
             """
@@ -89,7 +89,7 @@ public sealed class VideoJobRepository(NpgsqlDataSource dataSource) : IVideoJobR
 
     public async Task<IReadOnlyList<VideoJob>> ListActiveAsync(int limit, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // Oldest first, so one busy device cannot starve another's jobs.
         var rows = await connection.QueryAsync<VideoJobRow>(
@@ -107,7 +107,7 @@ public sealed class VideoJobRepository(NpgsqlDataSource dataSource) : IVideoJobR
 
     public async Task<int> FailStaleAsync(DateTimeOffset staleBefore, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         return await connection.ExecuteAsync(
             """

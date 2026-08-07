@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import * as api from "@/features/skills/api";
 import { useSkillsStore } from "@/features/skills/store";
 import { PanelBody, PanelEmpty, PanelHeader } from "@/features/settings/panels/panel-shell";
@@ -152,14 +153,17 @@ export function SkillsPanel() {
                   {skill.slug} · {formatBytes(skill.byteSize)}
                 </p>
               </div>
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label={t("common.delete")}
-                onPress={() => setDeleting(skill)}
-              >
-                <Trash2 className="size-3.5" aria-hidden />
-              </Button>
+              <TooltipTrigger>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={t("common.delete")}
+                  onPress={() => setDeleting(skill)}
+                >
+                  <Trash2 className="size-3.5" aria-hidden />
+                </Button>
+                <Tooltip>{t("common.delete")}</Tooltip>
+              </TooltipTrigger>
             </article>
           ))}
         </PanelBody>

@@ -130,12 +130,17 @@ export function SettingsDialog({
               rather than only on the one that looks empty. */}
           <ConfigErrorBanner />
 
-          {tab === "general" && <GeneralPanel />}
-          {tab === "providers" && <ProviderPanel />}
-          {tab === "models" && <ModelPanel />}
-          {tab === "modelConfig" && <ModelConfigPanel />}
-          {tab === "mcp" && <McpPanel />}
-          {tab === "skills" && <SkillsPanel />}
+          {/* Keyed on the tab so switching panels remounts this wrapper and replays the
+              entrance animation, instead of the new panel appearing mid-frame with no
+              transition at all. */}
+          <div key={tab} className="canvas-fade-in flex min-h-0 flex-1 flex-col">
+            {tab === "general" && <GeneralPanel />}
+            {tab === "providers" && <ProviderPanel />}
+            {tab === "models" && <ModelPanel />}
+            {tab === "modelConfig" && <ModelConfigPanel />}
+            {tab === "mcp" && <McpPanel />}
+            {tab === "skills" && <SkillsPanel />}
+          </div>
         </div>
       </div>
     </Dialog>

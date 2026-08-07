@@ -47,7 +47,8 @@ options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.
 
 ## 连接与设备绑定
 
-不使用 `IUserIdProvider`——它需要 `ClaimsPrincipal`，而本项目无账号体系。改用分组：
+不使用 `IUserIdProvider`——实时通信按设备/访客分组，账号资源权限仍由 HTTP 请求中的账号 session
+和数据库作用域控制。改用分组：
 
 ```
 OnConnectedAsync:

@@ -689,7 +689,7 @@ public static class AiGenerationEndpoints
             return TypedResults.NotFound();
         }
 
-        assetStore.Delete(storagePath);
+        await assetStore.DeleteAsync(storagePath, ct);
 
         return TypedResults.NoContent();
     }
@@ -719,7 +719,7 @@ public static class AiGenerationEndpoints
             return TypedResults.NotFound();
         }
 
-        var stream = assetStore.OpenRead(asset.StoragePath);
+        var stream = await assetStore.OpenReadAsync(asset.StoragePath, ct);
         if (stream is null)
         {
             // The row outlived its file. A 404 is the honest answer.
@@ -772,7 +772,7 @@ public static class AiGenerationEndpoints
             return null;
         }
 
-        await using var stream = assetStore.OpenRead(asset.StoragePath);
+        await using var stream = await assetStore.OpenReadAsync(asset.StoragePath, ct);
         if (stream is null)
         {
             return null;

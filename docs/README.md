@@ -1,6 +1,6 @@
 # Sol 后台框架文档
 
-Sol 是一个 .NET 11 Native AOT 后端：SignalR 实时通信、无账号体系的设备识别、Dapper + PostgreSQL、RabbitMQ、Redis。
+Sol 是一个 .NET 11 Native AOT 后端：SignalR 实时通信、游客优先且可选账号的设备识别、Dapper + PostgreSQL、RabbitMQ、Redis。
 
 ## 文档索引
 
@@ -25,7 +25,7 @@ Sol 是一个 .NET 11 Native AOT 后端：SignalR 实时通信、无账号体系
    ▼
 Sol.Api (:5298)  ──  SignalR Hub · 设备握手端点 · 健康检查
    │
-   ├── PostgreSQL   设备与访客身份（Dapper.AOT）
+   ├── PostgreSQL   设备、访客、账号、素材与 Skill payload（Dapper.AOT）
    ├── Redis        缓存 · 在线状态 · 分布式锁 · SignalR backplane（可选）
    └── RabbitMQ     集成事件（topic 交换机 + 死信队列）
 ```

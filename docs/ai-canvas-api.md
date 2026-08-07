@@ -119,7 +119,7 @@ DELETE /api/v1/canvas/{id}
 POST   /api/v1/canvas/assets      上传图片（multipart）
 GET    /api/v1/canvas/assets      素材库列表（?kind=image|video，?limit 上限 200）
 GET    /api/v1/canvas/assets/{id} 流式返回字节
-DELETE /api/v1/canvas/assets/{id} 删除元数据行与磁盘文件
+DELETE /api/v1/canvas/assets/{id} 删除元数据行与云端 blob（旧本地资产同时尝试删除兼容文件）
 GET    /api/v1/canvas/assets/groups          分组列表（含每组素材数）
 POST   /api/v1/canvas/assets/groups          新建分组（{ name }）
 PATCH  /api/v1/canvas/assets/groups/{id}     重命名分组（{ name }）

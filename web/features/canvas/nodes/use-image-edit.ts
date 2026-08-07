@@ -8,6 +8,7 @@ import {
   expandCanvas,
   type FlipAxis,
   flipImage,
+  resizeImage,
   rotateImage,
   upscaleImage,
 } from "@/features/canvas/image-ops";
@@ -29,16 +30,18 @@ export function useImageEdit(nodeId: string, sourceUrl: string | undefined) {
   const [error, setError] = useState<string | null>(null);
 
   const apply = useCallback(
-    async (produce: (url: string) => Promise<Blob>, label: string) => {
-      if (!sourceUrl || busy) return;
+    async (produce: (url: string) => Promise<Blob>, label: string): Promise<boolean> => {
+      if (!sourceUrl || busy) return false;
 
       setBusy(true);
       setError(null);
 
       try {
         await applyImageEdit(nodeId, sourceUrl, produce, label, {}, { spawn: spawnOutput });
+        return true;
       } catch (editError) {
         setError(editError instanceof Error ? editError.message : "Edit failed");
+        return false;
       } finally {
         setBusy(false);
       }
@@ -68,5 +71,8 @@ export function useImageEdit(nodeId: string, sourceUrl: string | undefined) {
      */
     expand: (insets: { top: number; right: number; bottom: number; left: number }) =>
       apply((url) => expandCanvas(url, insets), "expanded"),
+
+    resize: (width: number, height: number) =>
+      apply((url) => resizeImage(url, width, height), "resized"),
   };
 }

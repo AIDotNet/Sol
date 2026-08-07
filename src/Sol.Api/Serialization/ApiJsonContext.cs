@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Sol.Application.Contracts.Agent;
 using Sol.Application.Contracts.Ai;
+using Sol.Application.Contracts.Auth;
 using Sol.Application.Contracts.Device;
 using Sol.Application.Contracts.Realtime;
 using Sol.Application.Contracts.Skill;
@@ -32,6 +33,11 @@ namespace Sol.Api.Serialization;
 [JsonSerializable(typeof(HealthEntry))]
 [JsonSerializable(typeof(SystemInfoResponse))]
 [JsonSerializable(typeof(ErrorResponse))]
+// Authentication.
+[JsonSerializable(typeof(AuthProviderResponse))]
+[JsonSerializable(typeof(AuthProvidersResponse))]
+[JsonSerializable(typeof(AuthAccountResponse))]
+[JsonSerializable(typeof(AuthMeResponse))]
 // AI configuration. Every type crossing the HTTP boundary needs an entry: under Native AOT the
 // reflection-based serializer is gone, so an unregistered type throws at request time rather
 // than failing the build.

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
+using Sol.Api.Middleware;
 using Sol.Application.Abstractions.Caching;
 using Sol.Application.Abstractions.Persistence;
 using Sol.Application.Abstractions.Realtime;
@@ -33,7 +34,7 @@ public sealed class SolHub(
     public override async Task OnConnectedAsync()
     {
         var context = Context.GetHttpContext();
-        var deviceId = context is not null ? DeviceCookie.Read(context) : null;
+        var deviceId = context?.GetDeviceId();
 
         // Without an identity there is nothing to route messages to, and no way to attribute
         // activity. Refuse the connection so the client performs the handshake first.

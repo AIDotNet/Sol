@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useCanvasStore } from "@/features/canvas/store";
+import { CANVAS_TEMPLATES } from "@/features/canvas/templates";
 import type { TextNodeData } from "@/features/canvas/types";
 
 function textOf(id: string): string | undefined {
@@ -180,5 +181,70 @@ describe("undo history for node edits", () => {
     useCanvasStore.getState().undo();
 
     expect(textOf(id)).toBe("");
+  });
+});
+
+describe("automatic node layout", () => {
+  it("lays out a graph as one undoable edit", () => {
+    const state = useCanvasStore.getState();
+    const source = state.addNode("text", { x: 620, y: 280 }, { text: "source" });
+    const middle = state.addNode("imageGen", { x: 40, y: 40 });
+    const target = state.addNode("image", { x: 260, y: 620 });
+    state.onConnect({ source, target: middle, sourceHandle: null, targetHandle: null });
+    state.onConnect({ source: middle, target, sourceHandle: null, targetHandle: null });
+
+    const before = useCanvasStore.getState().nodes.map((node) => ({
+      id: node.id,
+      position: node.position,
+    }));
+    const historyBefore = useCanvasStore.getState().past.length;
+    const revisionBefore = useCanvasStore.getState().revision;
+
+    state.autoLayout();
+
+    const arranged = useCanvasStore.getState().nodes;
+    expect(arranged.find((node) => node.id === source)!.position.x).toBeLessThan(
+      arranged.find((node) => node.id === middle)!.position.x,
+    );
+    expect(arranged.find((node) => node.id === middle)!.position.x).toBeLessThan(
+      arranged.find((node) => node.id === target)!.position.x,
+    );
+    expect(useCanvasStore.getState().past).toHaveLength(historyBefore + 1);
+    expect(useCanvasStore.getState().revision).toBe(revisionBefore + 1);
+
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes.map((node) => ({ id: node.id, position: node.position }))).toEqual(
+      before,
+    );
+
+    useCanvasStore.getState().redo();
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === source)!.position.x).toBeLessThan(
+      useCanvasStore.getState().nodes.find((node) => node.id === middle)!.position.x,
+    );
+  });
+});
+
+describe("workflow templates", () => {
+  it("adds a connected example as one undoable graph edit", () => {
+    const template = CANVAS_TEMPLATES.find((candidate) => candidate.id === "reference-to-image")!;
+    const historyBefore = useCanvasStore.getState().past.length;
+
+    const ids = useCanvasStore.getState().addTemplate(template, { x: 100, y: 200 });
+    const state = useCanvasStore.getState();
+
+    expect(ids).toHaveLength(3);
+    expect(state.nodes.map((node) => node.type)).toEqual(["text", "image", "imageGen"]);
+    expect(state.edges).toHaveLength(2);
+    expect(state.edges.every((edge) => ids.includes(edge.source) && ids.includes(edge.target))).toBe(
+      true,
+    );
+    expect(state.nodes[0].position).toEqual({ x: 100, y: 200 });
+    expect(state.nodes[2].position).toEqual({ x: 480, y: 310 });
+    expect(state.past).toHaveLength(historyBefore + 1);
+
+    state.undo();
+
+    expect(useCanvasStore.getState().nodes).toEqual([]);
+    expect(useCanvasStore.getState().edges).toEqual([]);
   });
 });

@@ -11,13 +11,13 @@ namespace Sol.Infrastructure.Persistence;
 /// JSON mapping is unavailable under AOT, so the conversion stays explicit — the same approach
 /// <see cref="McpServerRepository"/> takes for its args/env/headers columns.
 /// </remarks>
-public sealed class CanvasRepository(NpgsqlDataSource dataSource) : ICanvasRepository
+public sealed class CanvasRepository(SolConnectionFactory connections) : ICanvasRepository
 {
     public async Task<IReadOnlyList<CanvasSummary>> ListAsync(
         DeviceId deviceId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // The node count is derived in SQL so a list request never transfers a graph body.
         // jsonb_array_length throws on a non-array, hence the type guard — a graph written by
@@ -33,7 +33,7 @@ public sealed class CanvasRepository(NpgsqlDataSource dataSource) : ICanvasRepos
                    created_at,
                    updated_at
             FROM canvas
-            WHERE device_id = @DeviceId
+            WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             ORDER BY updated_at DESC
             """,
             new DeviceIdParam { DeviceId = deviceId.Value });
@@ -43,13 +43,13 @@ public sealed class CanvasRepository(NpgsqlDataSource dataSource) : ICanvasRepos
 
     public async Task<Canvas?> FindAsync(DeviceId deviceId, CanvasId canvasId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var row = await connection.QueryFirstOrDefaultAsync<CanvasRow>(
             """
             SELECT canvas_id, device_id, name, graph::text AS graph_json, created_at, updated_at
             FROM canvas
-            WHERE canvas_id = @CanvasId AND device_id = @DeviceId
+            WHERE canvas_id = @CanvasId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new CanvasScopeParams { CanvasId = canvasId.Value, DeviceId = deviceId.Value });
 
@@ -58,7 +58,7 @@ public sealed class CanvasRepository(NpgsqlDataSource dataSource) : ICanvasRepos
 
     public async Task InsertAsync(Canvas canvas, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         await connection.ExecuteAsync(
             """
@@ -78,13 +78,13 @@ public sealed class CanvasRepository(NpgsqlDataSource dataSource) : ICanvasRepos
 
     public async Task<bool> UpdateAsync(Canvas canvas, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var affected = await connection.ExecuteAsync(
             """
             UPDATE canvas
             SET name = @Name, graph = @GraphJson::jsonb, updated_at = @UpdatedAt
-            WHERE canvas_id = @CanvasId AND device_id = @DeviceId
+            WHERE canvas_id = @CanvasId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new UpdateCanvasParams
             {
@@ -100,10 +100,10 @@ public sealed class CanvasRepository(NpgsqlDataSource dataSource) : ICanvasRepos
 
     public async Task<bool> DeleteAsync(DeviceId deviceId, CanvasId canvasId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var affected = await connection.ExecuteAsync(
-            "DELETE FROM canvas WHERE canvas_id = @CanvasId AND device_id = @DeviceId",
+            "DELETE FROM canvas WHERE canvas_id = @CanvasId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new CanvasScopeParams { CanvasId = canvasId.Value, DeviceId = deviceId.Value });
 
         return affected > 0;

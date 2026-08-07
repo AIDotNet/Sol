@@ -309,18 +309,8 @@ async function execute(
           return { action, deletedNodeIds: nodeIds };
         }
         case "auto_layout": {
-          const columns = Math.max(1, Math.ceil(Math.sqrt(state.nodes.length)));
-          const changes: NodeChange<CanvasNode>[] = state.nodes.map((node, index) => ({
-            type: "position",
-            id: node.id,
-            position: {
-              x: (index % columns) * 380,
-              y: Math.floor(index / columns) * 440,
-            },
-            dragging: false,
-          }));
-          state.onNodesChange(changes);
-          return { action, nodeCount: changes.length };
+          state.autoLayout();
+          return { action, nodeCount: useCanvasStore.getState().nodes.length };
         }
         case "fit_view":
         case "zoom_in":

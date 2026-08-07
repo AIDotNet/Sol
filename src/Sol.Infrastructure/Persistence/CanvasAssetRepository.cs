@@ -6,11 +6,11 @@ using Sol.Domain.Identity;
 
 namespace Sol.Infrastructure.Persistence;
 
-public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvasAssetRepository
+public sealed class CanvasAssetRepository(SolConnectionFactory connections) : ICanvasAssetRepository
 {
     public async Task InsertAsync(CanvasAsset asset, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         await connection.ExecuteAsync(
             """
@@ -35,14 +35,14 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
 
     public async Task<CanvasAsset?> FindAsync(DeviceId deviceId, Guid assetId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var row = await connection.QueryFirstOrDefaultAsync<AssetRow>(
             """
             SELECT asset_id, device_id, kind, media_type, storage_path, byte_size, prompt,
                    created_at, group_id
             FROM canvas_asset
-            WHERE asset_id = @AssetId AND device_id = @DeviceId
+            WHERE asset_id = @AssetId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new AssetScopeParams { AssetId = assetId, DeviceId = deviceId.Value });
 
@@ -55,7 +55,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
         int limit,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // Two statements rather than one with `(@Kind IS NULL OR kind = @Kind)`: that form
         // makes the planner choose a single plan for both shapes, and Dapper.AOT prefers a
@@ -66,7 +66,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
                 SELECT asset_id, device_id, kind, media_type, storage_path, byte_size, prompt,
                        created_at, group_id
                 FROM canvas_asset
-                WHERE device_id = @DeviceId
+                WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
                 ORDER BY created_at DESC
                 LIMIT @Limit
                 """,
@@ -76,7 +76,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
                 SELECT asset_id, device_id, kind, media_type, storage_path, byte_size, prompt,
                        created_at, group_id
                 FROM canvas_asset
-                WHERE device_id = @DeviceId AND kind = @Kind
+                WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) AND kind = @Kind
                 ORDER BY created_at DESC
                 LIMIT @Limit
                 """,
@@ -92,14 +92,14 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
 
     public async Task<string?> DeleteAsync(DeviceId deviceId, Guid assetId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // RETURNING makes this one round trip and closes the window where a concurrent delete
         // would leave the caller unsure whether it owns the file it is about to remove.
         return await connection.QueryFirstOrDefaultAsync<string>(
             """
             DELETE FROM canvas_asset
-            WHERE asset_id = @AssetId AND device_id = @DeviceId
+            WHERE asset_id = @AssetId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             RETURNING storage_path
             """,
             new AssetScopeParams { AssetId = assetId, DeviceId = deviceId.Value });
@@ -109,7 +109,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
         DeviceId deviceId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var rows = await connection.QueryAsync<AssetGroupRow>(
             """
@@ -117,7 +117,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
                    COUNT(a.asset_id)::int AS asset_count
             FROM canvas_asset_group g
             LEFT JOIN canvas_asset a ON a.group_id = g.group_id AND a.device_id = g.device_id
-            WHERE g.device_id = @DeviceId
+            WHERE g.device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             GROUP BY g.group_id, g.device_id, g.name, g.created_at, g.updated_at
             ORDER BY g.created_at, g.group_id
             """,
@@ -131,7 +131,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
         Guid groupId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var row = await connection.QueryFirstOrDefaultAsync<AssetGroupRow>(
             """
@@ -139,7 +139,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
                    COUNT(a.asset_id)::int AS asset_count
             FROM canvas_asset_group g
             LEFT JOIN canvas_asset a ON a.group_id = g.group_id AND a.device_id = g.device_id
-            WHERE g.group_id = @GroupId AND g.device_id = @DeviceId
+            WHERE g.group_id = @GroupId AND g.device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             GROUP BY g.group_id, g.device_id, g.name, g.created_at, g.updated_at
             """,
             new GroupScopeParams { GroupId = groupId, DeviceId = deviceId.Value });
@@ -151,7 +151,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
         CanvasAssetGroup group,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // The unique index is case-insensitive. Returning the row lets the endpoint turn a name
         // collision into a useful 409 without a second query.
@@ -181,7 +181,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
         DateTimeOffset updatedAt,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // The NOT EXISTS predicate makes a duplicate name a normal null result rather than a
         // database exception, while the second query keeps the current asset count intact.
@@ -189,7 +189,7 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
             """
             UPDATE canvas_asset_group AS g
             SET name = @Name, updated_at = @UpdatedAt
-            WHERE g.group_id = @GroupId AND g.device_id = @DeviceId
+            WHERE g.group_id = @GroupId AND g.device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
               AND NOT EXISTS (
                   SELECT 1
                   FROM canvas_asset_group other
@@ -214,12 +214,12 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
         Guid groupId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var affected = await connection.ExecuteAsync(
             """
             DELETE FROM canvas_asset_group
-            WHERE group_id = @GroupId AND device_id = @DeviceId
+            WHERE group_id = @GroupId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new GroupScopeParams { GroupId = groupId, DeviceId = deviceId.Value });
 
@@ -234,13 +234,13 @@ public sealed class CanvasAssetRepository(NpgsqlDataSource dataSource) : ICanvas
     {
         if (assetIds.Count == 0) return 0;
 
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         return await connection.ExecuteAsync(
             """
             UPDATE canvas_asset
             SET group_id = @GroupId
-            WHERE device_id = @DeviceId AND asset_id = ANY(@AssetIds)
+            WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) AND asset_id = ANY(@AssetIds)
             """,
             new AssignGroupParams
             {

@@ -10,7 +10,7 @@ namespace Sol.Infrastructure.Persistence;
 /// Stores agent conversations and runs. JSON content crosses Npgsql as text and is explicitly cast
 /// to jsonb, matching <see cref="CanvasRepository"/> and avoiding dynamic JSON mapping under AOT.
 /// </summary>
-public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentRepository
+public sealed class AgentRepository(SolConnectionFactory connections) : IAgentRepository
 {
     private const string SessionColumns =
         "session_id, device_id, canvas_id, title, created_at, updated_at";
@@ -26,9 +26,9 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         AgentSessionId sessionId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var row = await connection.QueryFirstOrDefaultAsync<AgentSessionRow>(
-            $"SELECT {SessionColumns} FROM agent_session WHERE session_id = @SessionId AND device_id = @DeviceId",
+            $"SELECT {SessionColumns} FROM agent_session WHERE session_id = @SessionId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new AgentSessionScopeParams { SessionId = sessionId.Value, DeviceId = deviceId.Value });
         return row?.ToDomain();
     }
@@ -38,16 +38,16 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         CanvasId canvasId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var row = await connection.QueryFirstOrDefaultAsync<AgentSessionRow>(
-            $"SELECT {SessionColumns} FROM agent_session WHERE canvas_id = @CanvasId AND device_id = @DeviceId",
+            $"SELECT {SessionColumns} FROM agent_session WHERE canvas_id = @CanvasId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new AgentCanvasScopeParams { CanvasId = canvasId.Value, DeviceId = deviceId.Value });
         return row?.ToDomain();
     }
 
     public async Task InsertSessionAsync(AgentSession session, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         await connection.ExecuteAsync(
             """
             INSERT INTO agent_session
@@ -67,16 +67,16 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
 
     public async Task<AgentRun?> FindRunAsync(DeviceId deviceId, AgentRunId runId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var row = await connection.QueryFirstOrDefaultAsync<AgentRunRow>(
-            $"SELECT {RunColumns} FROM agent_run WHERE run_id = @RunId AND device_id = @DeviceId",
+            $"SELECT {RunColumns} FROM agent_run WHERE run_id = @RunId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new AgentRunScopeParams { RunId = runId.Value, DeviceId = deviceId.Value });
         return row?.ToDomain();
     }
 
     public async Task<AgentRun?> FindRunByIdAsync(AgentRunId runId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var row = await connection.QueryFirstOrDefaultAsync<AgentRunRow>(
             $"SELECT {RunColumns} FROM agent_run WHERE run_id = @RunId",
             new AgentRunIdParams { RunId = runId.Value });
@@ -88,12 +88,12 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         CanvasId canvasId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var row = await connection.QueryFirstOrDefaultAsync<AgentRunRow>(
             $"""
             SELECT {RunColumns}
             FROM agent_run
-            WHERE device_id = @DeviceId AND canvas_id = @CanvasId
+            WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) AND canvas_id = @CanvasId
               AND status IN ('queued', 'running', 'awaiting_canvas', 'awaiting_approval')
             ORDER BY created_at DESC
             LIMIT 1
@@ -104,7 +104,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
 
     public async Task InsertRunAsync(AgentRun run, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         await connection.ExecuteAsync(
             """
             INSERT INTO agent_run
@@ -121,7 +121,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
 
     public async Task<bool> UpdateRunAsync(AgentRun run, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var affected = await connection.ExecuteAsync(
             """
             UPDATE agent_run
@@ -133,7 +133,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
                 started_at = @StartedAt,
                 finished_at = @FinishedAt,
                 updated_at = @UpdatedAt
-            WHERE run_id = @RunId AND device_id = @DeviceId
+            WHERE run_id = @RunId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             AgentRunParams.From(run));
         return affected > 0;
@@ -146,7 +146,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         string connectionId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var affected = await connection.ExecuteAsync(
             """
             UPDATE agent_run
@@ -156,7 +156,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
                     ELSE status
                 END,
                 updated_at = @Now
-            WHERE run_id = @RunId AND device_id = @DeviceId AND canvas_id = @CanvasId
+            WHERE run_id = @RunId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) AND canvas_id = @CanvasId
               AND status IN ('queued', 'running', 'awaiting_canvas', 'awaiting_approval')
               AND (executor_connection_id IS NULL OR executor_connection_id = @ConnectionId)
             """,
@@ -176,7 +176,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         string connectionId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         return await connection.ExecuteAsync(
             """
             UPDATE agent_run
@@ -186,7 +186,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
                     ELSE 'awaiting_canvas'
                 END,
                 updated_at = @Now
-            WHERE device_id = @DeviceId AND executor_connection_id = @ConnectionId
+            WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) AND executor_connection_id = @ConnectionId
               AND status IN ('queued', 'running', 'awaiting_canvas', 'awaiting_approval')
             """,
             new ClearAgentExecutorParams
@@ -199,7 +199,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
 
     public async Task<IReadOnlyList<AgentRunId>> ListQueuedAsync(int limit, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var rows = await connection.QueryAsync<QueuedAgentRunRow>(
             """
             SELECT run_id
@@ -217,13 +217,13 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         AgentSessionId sessionId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var rows = await connection.QueryAsync<AgentMessageRow>(
             """
             SELECT message_id, session_id, run_id, device_id, ordinal, role,
                    content::text AS content_json, created_at
             FROM agent_message
-            WHERE session_id = @SessionId AND device_id = @DeviceId
+            WHERE session_id = @SessionId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             ORDER BY ordinal
             """,
             new AgentSessionScopeParams { SessionId = sessionId.Value, DeviceId = deviceId.Value });
@@ -235,18 +235,18 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         AgentSessionId sessionId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         return await connection.ExecuteAsync(
             """
             DELETE FROM agent_message
-            WHERE session_id = @SessionId AND device_id = @DeviceId
+            WHERE session_id = @SessionId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new AgentSessionScopeParams { SessionId = sessionId.Value, DeviceId = deviceId.Value });
     }
 
     public async Task InsertMessageAsync(AgentStoredMessage message, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         await connection.ExecuteAsync(
             """
             INSERT INTO agent_message
@@ -273,12 +273,12 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         AgentSessionId sessionId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var row = await connection.QueryFirstAsync<AgentOrdinalRow>(
             """
             SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal
             FROM agent_message
-            WHERE session_id = @SessionId AND device_id = @DeviceId
+            WHERE session_id = @SessionId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new AgentSessionScopeParams { SessionId = sessionId.Value, DeviceId = deviceId.Value });
         return row.Ordinal;
@@ -286,7 +286,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
 
     public async Task InsertToolCallAsync(AgentStoredToolCall toolCall, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         await connection.ExecuteAsync(
             """
             INSERT INTO agent_tool_call
@@ -310,7 +310,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         DateTimeOffset finishedAt,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var affected = await connection.ExecuteAsync(
             """
             UPDATE agent_tool_call
@@ -318,7 +318,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
                 result = @ResultJson::jsonb,
                 error = @Error,
                 finished_at = @FinishedAt
-            WHERE run_id = @RunId AND device_id = @DeviceId AND tool_use_id = @ToolUseId
+            WHERE run_id = @RunId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) AND tool_use_id = @ToolUseId
             """,
             new CompleteAgentToolCallParams
             {
@@ -340,14 +340,14 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         string payloadJson,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
         var sequence = await connection.QueryFirstOrDefaultAsync<AgentSequenceRow>(
             """
             UPDATE agent_run
             SET last_seq = last_seq + 1, updated_at = @CreatedAt
-            WHERE run_id = @RunId AND device_id = @DeviceId
+            WHERE run_id = @RunId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             RETURNING last_seq AS sequence
             """,
             new AppendAgentEventParams
@@ -393,15 +393,15 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
         long afterSequence,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         var rows = await connection.QueryAsync<AgentEventRow>(
             """
             SELECT event.run_id, event.device_id, event.seq, event.type,
                    event.payload::text AS payload_json, event.created_at
             FROM agent_event event
             JOIN agent_run run ON run.run_id = event.run_id
-            WHERE event.run_id = @RunId AND event.device_id = @DeviceId
-              AND run.device_id = @DeviceId AND event.seq > @AfterSequence
+            WHERE event.run_id = @RunId AND event.device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
+              AND run.device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) AND event.seq > @AfterSequence
             ORDER BY event.seq
             LIMIT 1000
             """,
@@ -416,7 +416,7 @@ public sealed class AgentRepository(NpgsqlDataSource dataSource) : IAgentReposit
 
     public async Task<int> InterruptOrphanedRunsAsync(DateTimeOffset now, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         return await connection.ExecuteAsync(
             """
             UPDATE agent_run

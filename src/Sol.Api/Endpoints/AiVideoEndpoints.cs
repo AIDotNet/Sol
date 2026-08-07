@@ -294,7 +294,7 @@ public static class AiVideoEndpoints
         var asset = await assets.FindAsync(deviceId, assetId, ct);
         if (asset is null) return null;
 
-        await using var stream = assetStore.OpenRead(asset.StoragePath);
+        await using var stream = await assetStore.OpenReadAsync(asset.StoragePath, ct);
         if (stream is null) return null;
 
         using var buffer = new MemoryStream();

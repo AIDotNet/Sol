@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using Serilog;
+using Sol.Api.Auth;
 using Sol.Api.Endpoints;
 using Sol.Api.Extensions;
 using Sol.Api.Hubs;
@@ -11,6 +12,7 @@ using Sol.Api.Serialization;
 using Sol.Application.Abstractions.Ai;
 using Sol.Application.Abstractions.Persistence;
 using Sol.Application.Abstractions.Realtime;
+using Sol.Application.Abstractions.Security;
 using Sol.Application.Contracts.Device;
 using Sol.Application.Features.Identity;
 using Sol.Infrastructure;
@@ -57,6 +59,8 @@ builder.Services.AddOpenApi();
 var app = builder.Build();
 
 DeviceCookie.Configure(app.Services.GetRequiredService<IOptions<DeviceIdentityOptions>>());
+AccountSessionCookie.Configure(
+    app.Services.GetRequiredService<IOptions<AuthenticationOptions>>().Value);
 VerifyAotRegistrations(app.Services);
 
 // --migrate-only lets a deployment apply schema changes as an explicit step rather than as a
@@ -73,6 +77,7 @@ if (app.Services.GetRequiredService<IOptions<PostgresOptions>>().Value.RunMigrat
 
 app.UseSerilogRequestLogging();
 app.UseDeviceContext();
+app.UseAccountContext();
 
 if (app.Environment.IsDevelopment())
 {
@@ -80,6 +85,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapDeviceEndpoints();
+app.MapAuthEndpoints();
 app.MapSystemEndpoints();
 app.MapAiProviderEndpoints();
 app.MapAiConfigImportEndpoints();
@@ -134,6 +140,9 @@ static void VerifyAotRegistrations(IServiceProvider services)
     _ = scope.ServiceProvider.GetRequiredService<ISkillStore>();
     _ = scope.ServiceProvider.GetRequiredService<ISkillScriptRunner>();
     _ = scope.ServiceProvider.GetRequiredService<ISkillRepository>();
+    _ = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
+    _ = scope.ServiceProvider.GetRequiredService<AccountAuthService>();
+    _ = scope.ServiceProvider.GetRequiredService<IExternalLoginProviderRegistry>();
 }
 
 /// <summary>Exposed so integration tests can drive the host.</summary>

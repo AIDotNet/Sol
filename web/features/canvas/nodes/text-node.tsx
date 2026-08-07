@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { resolveSlot, useAiStore } from "@/features/ai/store";
-import { NodeShell } from "@/features/canvas/nodes/node-shell";
+import { NodeActionButton, NodeShell } from "@/features/canvas/nodes/node-shell";
 import { useCanvasStore } from "@/features/canvas/store";
 import { generateText, spawnTextResult, type TextTask } from "@/features/canvas/text-generation";
 import { NODE_MIN_SIZE, type TextNodeData } from "@/features/canvas/types";
@@ -113,24 +113,24 @@ export function TextNode({ id, data, selected }: NodeProps) {
         selected={selected}
         actions={
           <>
-            <Button
+            <NodeActionButton
               size="icon-xs"
               variant="ghost"
               className="size-5"
               onPress={() => adjustFont(-FONT_STEP)}
-              aria-label="Decrease font size"
+              label="Decrease font size"
             >
               <Minus className="size-2.5" aria-hidden />
-            </Button>
-            <Button
+            </NodeActionButton>
+            <NodeActionButton
               size="icon-xs"
               variant="ghost"
               className="size-5"
               onPress={() => adjustFont(FONT_STEP)}
-              aria-label="Increase font size"
+              label="Increase font size"
             >
               <Plus className="size-2.5" aria-hidden />
-            </Button>
+            </NodeActionButton>
           </>
         }
       >

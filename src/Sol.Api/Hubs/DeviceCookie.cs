@@ -46,4 +46,15 @@ public static class DeviceCookie
             IsEssential = true,
         });
     }
+
+    public static void Delete(HttpContext context, bool isDevelopment)
+    {
+        context.Response.Cookies.Delete(_cookieName, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = !isDevelopment,
+            Path = "/",
+        });
+    }
 }

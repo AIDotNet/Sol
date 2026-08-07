@@ -16,7 +16,7 @@ namespace Sol.Infrastructure.Persistence;
 /// can map an enum by ordinal, but that would couple the database to declaration order.
 /// </para>
 /// </remarks>
-public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderRepository
+public sealed class ProviderRepository(SolConnectionFactory connections) : IProviderRepository
 {
     private const string ProviderColumns = """
         provider_id, device_id, builtin_id, name, description, icon, type,
@@ -32,13 +32,13 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
 
     public async Task<IReadOnlyList<AiProvider>> ListAsync(DeviceId deviceId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var providerRows = await connection.QueryAsync<ProviderRow>(
             $"""
             SELECT {ProviderColumns}
             FROM ai_provider
-            WHERE device_id = @DeviceId
+            WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             ORDER BY sort_order, created_at
             """,
             new DeviceIdParam { DeviceId = deviceId.Value });
@@ -52,7 +52,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
                    m.supports_function_call, m.supports_thinking, m.sort_order, m.created_at
             FROM ai_model m
             JOIN ai_provider p ON p.provider_id = m.provider_id
-            WHERE p.device_id = @DeviceId
+            WHERE p.device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             ORDER BY m.sort_order, m.created_at
             """,
             new DeviceIdParam { DeviceId = deviceId.Value });
@@ -78,7 +78,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
         ProviderId providerId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // device_id is part of the predicate, not checked afterwards: a provider belonging to
         // another device is indistinguishable from one that does not exist.
@@ -86,7 +86,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
             $"""
             SELECT {ProviderColumns}
             FROM ai_provider
-            WHERE provider_id = @ProviderId AND device_id = @DeviceId
+            WHERE provider_id = @ProviderId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new ProviderScopeParam { ProviderId = providerId.Value, DeviceId = deviceId.Value });
 
@@ -115,13 +115,13 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
         string name,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var row = await connection.QueryFirstOrDefaultAsync<ProviderRow>(
             $"""
             SELECT {ProviderColumns}
             FROM ai_provider
-            WHERE device_id = @DeviceId AND lower(name) = lower(@Name)
+            WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) AND lower(name) = lower(@Name)
             """,
             new ProviderNameParam { DeviceId = deviceId.Value, Name = name });
 
@@ -149,13 +149,13 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
         string builtinId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var row = await connection.QueryFirstOrDefaultAsync<ProviderRow>(
             $"""
             SELECT {ProviderColumns}
             FROM ai_provider
-            WHERE device_id = @DeviceId AND builtin_id = @BuiltinId
+            WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)) AND builtin_id = @BuiltinId
             """,
             new ProviderBuiltinParam { DeviceId = deviceId.Value, BuiltinId = builtinId });
 
@@ -180,7 +180,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
 
     public async Task InsertAsync(AiProvider provider, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         await connection.ExecuteAsync(
             """
@@ -217,7 +217,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
 
     public async Task UpdateAsync(AiProvider provider, ApiKeyUpdate apiKey, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // One statement per key disposition rather than a COALESCE trick: "leave the key alone"
         // and "clear the key" are both expressible, and neither can be reached by accident.
@@ -242,7 +242,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
                 preset_version = @PresetVersion, sort_order = @SortOrder,
                 {keyClause}
                 updated_at = @UpdatedAt
-            WHERE provider_id = @ProviderId AND device_id = @DeviceId
+            WHERE provider_id = @ProviderId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new UpdateProviderParams
             {
@@ -270,11 +270,11 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
         ProviderId providerId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // Models cascade via the foreign key.
         var affected = await connection.ExecuteAsync(
-            "DELETE FROM ai_provider WHERE provider_id = @ProviderId AND device_id = @DeviceId",
+            "DELETE FROM ai_provider WHERE provider_id = @ProviderId AND device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new ProviderScopeParam { ProviderId = providerId.Value, DeviceId = deviceId.Value });
 
         return affected > 0;
@@ -282,16 +282,16 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
 
     public async Task<int> NextSortOrderAsync(DeviceId deviceId, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         return await connection.ExecuteScalarAsync<int>(
-            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM ai_provider WHERE device_id = @DeviceId",
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM ai_provider WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))",
             new DeviceIdParam { DeviceId = deviceId.Value });
     }
 
     public async Task InsertModelAsync(AiModel model, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
         await InsertModelCoreAsync(connection, model, onConflictDoNothing: false);
     }
 
@@ -304,7 +304,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
             return 0;
         }
 
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var added = 0;
         foreach (var model in models)
@@ -354,7 +354,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
 
     public async Task UpdateModelAsync(AiModel model, CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         await connection.ExecuteAsync(
             """
@@ -389,7 +389,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
         ModelId modelId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         var row = await connection.QueryFirstOrDefaultAsync<ModelRow>(
             """
@@ -398,7 +398,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
                    m.supports_function_call, m.supports_thinking, m.sort_order, m.created_at
             FROM ai_model m
             JOIN ai_provider p ON p.provider_id = m.provider_id
-            WHERE m.model_id = @ModelId AND p.device_id = @DeviceId
+            WHERE m.model_id = @ModelId AND p.device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId))
             """,
             new ModelScopeParam { ModelId = modelId.Value, DeviceId = deviceId.Value });
 
@@ -410,7 +410,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
         ModelId modelId,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         // The device check goes through a subquery rather than a join: Postgres does not accept
         // a JOIN in DELETE without USING, and the subquery keeps ownership in the predicate.
@@ -418,7 +418,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
             """
             DELETE FROM ai_model
             WHERE model_id = @ModelId
-              AND provider_id IN (SELECT provider_id FROM ai_provider WHERE device_id = @DeviceId)
+              AND provider_id IN (SELECT provider_id FROM ai_provider WHERE device_id IN (SELECT device_id FROM sol_accessible_device_ids(@DeviceId)))
             """,
             new ModelScopeParam { ModelId = modelId.Value, DeviceId = deviceId.Value });
 
@@ -430,7 +430,7 @@ public sealed class ProviderRepository(NpgsqlDataSource dataSource) : IProviderR
         bool enabled,
         CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var connection = await connections.OpenAsync(ct);
 
         await connection.ExecuteAsync(
             "UPDATE ai_model SET enabled = @Enabled WHERE provider_id = @ProviderId",

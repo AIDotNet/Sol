@@ -53,33 +53,35 @@ internal sealed class FileSystemAssetStore : IAssetStore
         return new StoredAsset(relativePath.Replace('\\', '/'), mediaType, bytes.LongLength);
     }
 
-    public Stream? OpenRead(string storagePath)
+    public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (!TryResolve(storagePath, out var absolute))
         {
-            return null;
+            return Task.FromResult<Stream?>(null);
         }
 
         try
         {
-            return File.OpenRead(absolute);
+            return Task.FromResult<Stream?>(File.OpenRead(absolute));
         }
         catch (FileNotFoundException)
         {
             // The row outlived its file — expected if the asset directory was cleared.
-            return null;
+            return Task.FromResult<Stream?>(null);
         }
         catch (DirectoryNotFoundException)
         {
-            return null;
+            return Task.FromResult<Stream?>(null);
         }
     }
 
-    public void Delete(string storagePath)
+    public Task DeleteAsync(string storagePath, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (!TryResolve(storagePath, out var absolute))
         {
-            return;
+            return Task.CompletedTask;
         }
 
         try
@@ -91,6 +93,8 @@ internal sealed class FileSystemAssetStore : IAssetStore
             // Cleanup is best-effort; a locked file should not fail the caller's operation.
             _logger.LogWarning(exception, "Could not delete asset {Path}", storagePath);
         }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>

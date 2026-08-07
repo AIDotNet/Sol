@@ -94,6 +94,88 @@ export function downloadJson(filename: string, json: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/**
+ * Copies the pixels behind an image node to the system clipboard.
+ *
+ * Asset URLs are cookie-authenticated, so the image has to be fetched before creating the
+ * ClipboardItem. PNG is the interoperable image clipboard format; other supported canvas image
+ * formats are rasterised to PNG first so JPEG/WebP/GIF assets work in browsers that only accept
+ * PNG clipboard representations.
+ */
+export async function copyImageToClipboard(url: string, mediaType?: string): Promise<void> {
+  const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+  const ClipboardItemConstructor = globalThis.ClipboardItem;
+  if (!clipboard?.write || !ClipboardItemConstructor) {
+    throw new Error("Image clipboard is not supported.");
+  }
+
+  const response = await fetch(url, { credentials: "include" });
+  if (!response.ok) throw new Error("The image could not be loaded.");
+
+  const source = await response.blob();
+  const sourceType = source.type.toLowerCase();
+  const declaredType = mediaType?.toLowerCase();
+  const type = sourceType.startsWith("image/")
+    ? sourceType
+    : declaredType?.startsWith("image/")
+      ? declaredType
+      : "image/png";
+  const typedSource = source.type === type ? source : new Blob([source], { type });
+  const image = type === "image/png" ? typedSource : await rasterizeAsPng(typedSource);
+
+  await clipboard.write([new ClipboardItemConstructor({ "image/png": image })]);
+}
+
+async function rasterizeAsPng(source: Blob): Promise<Blob> {
+  const objectUrl = URL.createObjectURL(source);
+
+  try {
+    if (typeof createImageBitmap === "function") {
+      const bitmap = await createImageBitmap(source);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, bitmap.width);
+        canvas.height = Math.max(1, bitmap.height);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("A 2D canvas context is unavailable.");
+        context.drawImage(bitmap, 0, 0);
+        return await canvasToBlob(canvas);
+      } finally {
+        bitmap.close();
+      }
+    }
+
+    const image = await loadImage(objectUrl);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, image.naturalWidth || image.width);
+    canvas.height = Math.max(1, image.naturalHeight || image.height);
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("A 2D canvas context is unavailable.");
+    context.drawImage(image, 0, 0);
+    return await canvasToBlob(canvas);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("The image could not be decoded."));
+    image.src = url;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("The image could not be encoded."))),
+      "image/png",
+    );
+  });
+}
+
 /** Nodes currently selected, for commands that act on a selection. */
 export function selectedNodes(): CanvasNode[] {
   return useCanvasStore.getState().nodes.filter((node) => node.selected);
