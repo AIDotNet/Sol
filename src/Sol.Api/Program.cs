@@ -72,7 +72,11 @@ if (args.Contains("--migrate-only"))
 
 if (app.Services.GetRequiredService<IOptions<PostgresOptions>>().Value.RunMigrationsOnStartup)
 {
-    await RunMigrationsAsync(app.Services);
+    var migrationExitCode = await RunMigrationsAsync(app.Services);
+    if (migrationExitCode != 0)
+    {
+        return migrationExitCode;
+    }
 }
 
 app.UseSerilogRequestLogging();
