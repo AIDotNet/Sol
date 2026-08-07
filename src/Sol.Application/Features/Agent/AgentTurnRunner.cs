@@ -675,6 +675,11 @@ public sealed class AgentTurnRunner(
         SkillScriptInput input,
         CancellationToken ct)
     {
+        if (!await skillRunner.IsAvailableAsync(ct))
+        {
+            return SkillError("skill_script_execution_disabled");
+        }
+
         var skill = await skills.FindAsync(deviceId, input.Skill!.Id, ct);
         if (skill is null || !skill.Enabled || !skill.HasScripts)
         {
@@ -809,7 +814,8 @@ public sealed class AgentTurnRunner(
         var bindings = new Dictionary<string, McpBinding>(StringComparer.Ordinal);
         var servers = await mcpServers.ListAsync(run.DeviceId, ct);
         foreach (var server in servers.Where(candidate =>
-                     candidate.Enabled && candidate.Transport != McpTransport.Stdio))
+                     candidate.Enabled
+                     && candidate.Transport is McpTransport.Sse or McpTransport.StreamableHttp))
         {
             IReadOnlyList<McpRuntimeTool> discovered;
             try

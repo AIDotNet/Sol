@@ -29,11 +29,14 @@ public static class SkillEndpoints
     private static async Task<Results<Ok<SkillListResponse>, UnauthorizedHttpResult>> ListAsync(
         HttpContext http,
         ISkillRepository skills,
+        IOptions<SkillsOptions> configuredOptions,
         CancellationToken ct)
     {
         if (http.GetDeviceId() is not { } deviceId) return TypedResults.Unauthorized();
         var list = await skills.ListAsync(deviceId, ct);
-        return TypedResults.Ok(new SkillListResponse([.. list.Select(ToResponse)]));
+        return TypedResults.Ok(new SkillListResponse(
+            configuredOptions.Value.SandboxEnabled,
+            [.. list.Select(ToResponse)]));
     }
 
     private static async Task<Results<Ok<SkillResponse>, NotFound, BadRequest<ErrorResponse>,

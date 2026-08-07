@@ -51,56 +51,33 @@ services:
       timeout: 5s
       retries: 10
 
-  # Executes uploaded Skill scripts outside Sol.Api. It has no network, no Sol configuration,
-  # no database/cache/broker volumes, and no Docker socket. Each script is isolated again with
-  # bubblewrap inside this already-constrained container.
-  skill-runner:
-    build:
-      context: ./runner
-    container_name: sol-skill-runner
-    network_mode: none
-    read_only: true
-    # Docker Desktop disables unprivileged user namespaces, so the runner can fall back to a
-    # per-job chroot + unique uid. These narrow capabilities only construct/clean that jail and
-    # signal timed-out descendants; the interpreter drops every capability before user code starts.
-    # Sol.Api never receives them.
-    user: "0:0"
-    cap_drop: ["ALL"]
-    cap_add: ["CHOWN", "DAC_OVERRIDE", "KILL", "SETGID", "SETUID", "SYS_CHROOT"]
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 64
-    mem_limit: 1g
-    cpus: 1.0
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,size=16m
-      - /jobs:rw,exec,nosuid,nodev,size=512m
+  # Official OpenSandbox control plane. It owns Docker access and creates an isolated,
+  # short-lived container for every approved Skill execution.
+  opensandbox:
+    image: opensandbox/server:latest
+    container_name: sol-opensandbox
+    ports:
+      - "8090:8090"
     volumes:
-      # Read-only source mounts keep local runner edits testable without rebuilding the image;
-      # production images still carry the same files from runner/Dockerfile.
-      - ./runner/runner.py:/app/runner.py:ro
-      - ./runner/healthcheck.py:/app/healthcheck.py:ro
-      - ./runner/integration_test.py:/app/integration_test.py:ro
-      - ./runner/chroot_exec.py:/app/chroot_exec.py:ro
-      - sol-runner-socket:/run/sol
+      - /var/run/docker.sock:/var/run/docker.sock
+      - sol-opensandbox-data:/root/.opensandbox
+    configs:
+      - source: opensandbox-config
+        target: /etc/opensandbox/config.toml
     environment:
-      SOL_RUNNER_SOCKET: /run/sol/runner.sock
-      SOL_RUNNER_JOBS: /jobs
-      SOL_RUNNER_MAX_REQUEST_BYTES: 41943040
-      SOL_RUNNER_MAX_PACKAGE_BYTES: 26214400
-      SOL_RUNNER_MAX_FILES: 1000
-      SOL_RUNNER_MAX_CONCURRENT: 2
+      SANDBOX_CONFIG_PATH: /etc/opensandbox/config.toml
+      OPENSANDBOX_SERVER_API_KEY: sol-dev-opensandbox-key
     healthcheck:
-      test: ["CMD", "/usr/bin/python3", "/app/healthcheck.py"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
   # Native AOT build of Sol.Api (see src/Sol.Api/Dockerfile for the SDK/toolchain notes).
-  # Containerized so it can share the skill-runner's Unix socket volume — the production
-  # setup docs/operations.md calls for — which a host-run `dotnet run` cannot see.
+  # Containerized so it can reach the OpenSandbox control plane over the Compose network.
   api:
+    image: hejiale010426/sol-api:latest
     build:
       context: .
       dockerfile: src/Sol.Api/Dockerfile
@@ -130,13 +107,14 @@ services:
       # Same dev-only placeholders as appsettings.Development.json — never reuse in production.
       DeviceIdentity__Pepper: "dev-only-pepper-do-not-use-in-production"
       Ai__EncryptionKey: "c29sLWRldi1rZXktbm90LWZvci1wcm9kdWN0aW9uISE="
-      # Points at the same socket skill-runner listens on, via the shared volume below.
-      Skills__RunnerSocketPath: "/run/sol/runner.sock"
-    volumes:
-      - sol-runner-socket:/run/sol
+      Skills__SandboxEnabled: "true"
+      Skills__OpenSandboxDomain: "opensandbox:8090"
+      Skills__OpenSandboxApiKey: "sol-dev-opensandbox-key"
+      Skills__OpenSandboxImage: "opensandbox/code-interpreter:v1.1.0"
     restart: unless-stopped
 
   web:
+    image: hejiale010426/sol-web:latest
     build:
       context: ./web
       args:
@@ -158,4 +136,27 @@ volumes:
   sol-pgdata:
   sol-redisdata:
   sol-rabbitdata:
-  sol-runner-socket:
+  sol-opensandbox-data:
+
+configs:
+  opensandbox-config:
+    content: |
+      [server]
+      host = "0.0.0.0"
+      port = 8090
+      api_key = "sol-dev-opensandbox-key"
+      max_sandbox_timeout_seconds = 120
+
+      [runtime]
+      type = "docker"
+      execd_image = "opensandbox/execd:v1.0.21"
+
+      [egress]
+      image = "opensandbox/egress:v1.1.5"
+
+      [docker]
+      network_mode = "bridge"
+      host_ip = "host.docker.internal"
+      pids_limit = 64
+      no_new_privileges = true
+      drop_capabilities = ["AUDIT_WRITE", "MKNOD", "NET_ADMIN", "NET_RAW", "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_TIME", "SYS_TTY_CONFIG"]

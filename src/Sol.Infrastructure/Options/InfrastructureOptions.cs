@@ -44,11 +44,19 @@ public sealed class SkillsOptions
 {
     public const string SectionName = "Skills";
 
+    /// <summary>
+    /// Enables execution of Skill scripts through the isolated runner. When disabled, Skill
+    /// instructions and resources remain readable but scripts are never offered or executed.
+    /// </summary>
+    public bool SandboxEnabled { get; set; }
+
     public string Root { get; set; } = "./storage/skills";
     public int MaxUploadBytes { get; set; } = 25 * 1024 * 1024;
     public int MaxExtractedBytes { get; set; } = 100 * 1024 * 1024;
     public int MaxEntries { get; set; } = 1_000;
-    public string RunnerSocketPath { get; set; } = "./storage/runner/runner.sock";
+    public string OpenSandboxDomain { get; set; } = "localhost:8090";
+    public string OpenSandboxApiKey { get; set; } = string.Empty;
+    public string OpenSandboxImage { get; set; } = "opensandbox/code-interpreter:v1.1.0";
     public int RunnerTimeoutSeconds { get; set; } = 30;
     public int RunnerMaxOutputBytes { get; set; } = 256 * 1024;
     public int RunnerMaxPackageBytes { get; set; } = 25 * 1024 * 1024;

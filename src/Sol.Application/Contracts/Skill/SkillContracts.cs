@@ -30,4 +30,4 @@ public sealed record SkillResponse(
     string CreatedAt,
     string UpdatedAt);
 
-public sealed record SkillListResponse(SkillResponse[] Skills);
+public sealed record SkillListResponse(bool SandboxEnabled, SkillResponse[] Skills);

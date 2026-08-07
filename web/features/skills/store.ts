@@ -5,6 +5,7 @@ import * as api from "@/features/skills/api";
 
 interface SkillsState {
   skills: api.Skill[];
+  sandboxEnabled: boolean;
   loading: boolean;
   loaded: boolean;
   error: string | null;
@@ -16,6 +17,7 @@ interface SkillsState {
 
 export const useSkillsStore = create<SkillsState>((set, get) => ({
   skills: [],
+  sandboxEnabled: false,
   loading: false,
   loaded: false,
   error: null,
@@ -29,7 +31,12 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const result = await api.listSkills();
-      set({ skills: result.skills, loading: false, loaded: true });
+      set({
+        skills: result.skills,
+        sandboxEnabled: result.sandboxEnabled,
+        loading: false,
+        loaded: true,
+      });
     } catch (error) {
       set({
         loading: false,

@@ -70,7 +70,7 @@ public static class DependencyInjection
         AddCaching(services);
         AddMessaging(services);
         AddIdentity(services);
-        AddAi(services, aiOptions);
+        AddAi(services, aiOptions, skillsOptions);
 
         services.AddSingleton<DependencyHealthProbe>();
 
@@ -106,7 +106,10 @@ public static class DependencyInjection
         services.AddSingleton<MigrationRunner>();
     }
 
-    private static void AddAi(IServiceCollection services, AiOptions options)
+    private static void AddAi(
+        IServiceCollection services,
+        AiOptions options,
+        SkillsOptions skillsOptions)
     {
         // Constructed eagerly so a missing or malformed encryption key fails at startup rather
         // than on the first request that tries to save a key.
@@ -149,7 +152,14 @@ public static class DependencyInjection
         services.AddSingleton<ISkillPackageScanner, ZipSkillScanner>();
         services.AddSingleton<FileSystemSkillStore>();
         services.AddSingleton<ISkillStore, CloudSkillStore>();
-        services.AddSingleton<ISkillScriptRunner, UnixSocketSkillScriptRunner>();
+        if (skillsOptions.SandboxEnabled)
+        {
+            services.AddSingleton<ISkillScriptRunner, OpenSandboxSkillScriptRunner>();
+        }
+        else
+        {
+            services.AddSingleton<ISkillScriptRunner, DisabledSkillScriptRunner>();
+        }
 
         services.AddSingleton<IAgentModelClient, AnthropicAgentClient>();
         services.AddSingleton<IAgentModelClient, OpenAiChatAgentClient>();

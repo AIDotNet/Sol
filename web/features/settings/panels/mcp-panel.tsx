@@ -87,7 +87,9 @@ export function McpPanel() {
                     aria-hidden
                     className={cn(
                       "size-1.5 shrink-0 rounded-full",
-                      server.enabled ? "bg-emerald-500" : "bg-muted-foreground/40",
+                      server.enabled && isMcpRuntimeSupported(server.transport)
+                        ? "bg-emerald-500"
+                        : "bg-muted-foreground/40",
                     )}
                   />
                 </button>
@@ -124,6 +126,7 @@ function McpDetail({ server }: { server: McpServer }) {
   const deleteMcpServer = useAiStore((state) => state.deleteMcpServer);
 
   const isStdio = server.transport === "stdio";
+  const runtimeSupported = isMcpRuntimeSupported(server.transport);
   const [deleting, setDeleting] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<{
@@ -161,7 +164,7 @@ function McpDetail({ server }: { server: McpServer }) {
         <Button
           size="sm"
           variant="outline"
-          isDisabled={checking || !isMcpRuntimeSupported(server.transport)}
+          isDisabled={checking || !runtimeSupported}
           onPress={() => void check()}
         >
           {checking ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
@@ -170,6 +173,7 @@ function McpDetail({ server }: { server: McpServer }) {
 
         <Switch
           isSelected={server.enabled}
+          isDisabled={!runtimeSupported}
           onChange={(value) => void updateMcpServer(server.id, { enabled: value })}
           aria-label={server.enabled ? t("common.disable") : t("common.enable")}
         />
@@ -188,7 +192,7 @@ function McpDetail({ server }: { server: McpServer }) {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
-        {!isMcpRuntimeSupported(server.transport) && (
+        {!runtimeSupported && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
             <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" aria-hidden />
             <p className="text-xs text-muted-foreground">{t("mcp.runtimeNotSupported")}</p>
@@ -230,7 +234,11 @@ function McpDetail({ server }: { server: McpServer }) {
             </SelectTrigger>
             <SelectContent>
               {(Object.keys(TRANSPORT_LABELS) as McpTransport[]).map((value) => (
-                <SelectItem key={value} id={value}>
+                <SelectItem
+                  key={value}
+                  id={value}
+                  isDisabled={!isMcpRuntimeSupported(value)}
+                >
                   {TRANSPORT_LABELS[value]}
                 </SelectItem>
               ))}

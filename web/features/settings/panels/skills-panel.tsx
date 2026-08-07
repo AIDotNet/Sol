@@ -22,7 +22,9 @@ export function SkillsPanel() {
   const t = useT();
   const input = useRef<HTMLInputElement>(null);
   const skills = useSkillsStore((state) => state.skills);
+  const sandboxEnabled = useSkillsStore((state) => state.sandboxEnabled);
   const loading = useSkillsStore((state) => state.loading);
+  const loaded = useSkillsStore((state) => state.loaded);
   const error = useSkillsStore((state) => state.error);
   const load = useSkillsStore((state) => state.load);
   const install = useSkillsStore((state) => state.install);
@@ -98,6 +100,13 @@ export function SkillsPanel() {
         onChange={(event) => void selectFile(event.target.files?.[0])}
       />
 
+      {loaded && !sandboxEnabled ? (
+        <div className="mx-5 mt-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" aria-hidden />
+          <p className="text-xs text-muted-foreground">{t("skills.sandboxDisabled")}</p>
+        </div>
+      ) : null}
+
       {skills.length === 0 && !loading ? (
         <PanelEmpty
           title={t("skills.empty")}
@@ -141,9 +150,16 @@ export function SkillsPanel() {
                   <h3 className="truncate text-sm font-medium">{skill.name}</h3>
                   <RiskBadge risk={skill.maxRisk} />
                   {skill.hasScripts ? (
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[0.625rem] text-muted-foreground">
-                      {t("skills.containsScripts")}
-                    </span>
+                    <>
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[0.625rem] text-muted-foreground">
+                        {t("skills.containsScripts")}
+                      </span>
+                      {!sandboxEnabled ? (
+                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[0.625rem] text-amber-700 dark:text-amber-400">
+                          {t("skills.scriptsDisabled")}
+                        </span>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">

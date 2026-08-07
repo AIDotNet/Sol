@@ -67,7 +67,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return read<T>(response);
 }
 
-export function listSkills(): Promise<{ skills: Skill[] }> {
+export interface SkillList {
+  sandboxEnabled: boolean;
+  skills: Skill[];
+}
+
+export function listSkills(): Promise<SkillList> {
   return request("/");
 }
 

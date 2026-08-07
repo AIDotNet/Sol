@@ -62,7 +62,10 @@ OpenTelemetry 1.17.0，OTLP exporter **仅在配置了 endpoint 时启用**，�
 | `Ai:RequestTimeoutSeconds` | 上游生成请求超时，默认 1200，绑定时最低 600 |
 | `Skills:Root` | 旧版本已安装 Skill 文件的兼容读取目录，默认 `./storage/skills`；新 Skill 文件写入 PostgreSQL |
 | `Skills:MaxUploadBytes` / `MaxExtractedBytes` / `MaxEntries` | Skill 包边界 |
-| `Skills:RunnerSocketPath` | Sol.Api 到隔离 runner 的 Unix socket |
+| `Skills:SandboxEnabled` | 是否暴露并执行 Skill 脚本；关闭时说明与资源仍可读取 |
+| `Skills:OpenSandboxDomain` | OpenSandbox 服务地址，默认 `localhost:8090` |
+| `Skills:OpenSandboxApiKey` | OpenSandbox API Key，生产环境必须从密钥管理服务注入 |
+| `Skills:OpenSandboxImage` | 每次 Skill 执行使用的 OpenSandbox 镜像 |
 | `Skills:RunnerTimeoutSeconds` | 脚本最长时限，默认 30，最大 120 |
 | `Skills:RunnerMaxOutputBytes` | stdout/stderr 各自上限，默认 256 KiB，绑定范围 16 KiB–1 MiB |
 | `Skills:RunnerMaxPackageBytes` | 单次发送给 runner 的解码后包上限，默认/最大 25 MiB；为 base64 与 JSON 开销预留空间 |
@@ -85,24 +88,19 @@ OpenTelemetry 1.17.0，OTLP exporter **仅在配置了 endpoint 时启用**，�
 
 超过 30 分钟没有进展的任务会被标记为 failed（`VideoJobPoller.StaleAfter`），避免上游接了任务却再不回报时留下永远轮询的行。
 
-## Skill runner
+## Skill sandbox
 
-上传包中的脚本绝不在 `Sol.Api` 内执行。`docker-compose.yml` 的 `skill-runner` 使用 `network_mode: none`、只读根文件系统、非 root 用户、capabilities 全部丢弃、`no-new-privileges`、CPU/内存/pids/tmpfs 限制，而且不挂载 Postgres/Redis/RabbitMQ、Skill 根目录、资产目录、源码或 Docker socket。API 与 runner 只共享 Unix socket 目录；每次请求只发送当前 Skill 的文件。
+上传包中的脚本绝不在 `Sol.Api` 内执行。Sol 使用官方 [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) 服务创建短生命周期容器：API 通过官方 C# SDK 上传当前 Skill 的文件、以固定解释器执行已审批脚本，并在完成后销毁 sandbox。`load_skill` 仍只读取 Skill 内容；当 `Skills:SandboxEnabled=false` 或 OpenSandbox 不健康时，`run_skill_script` 不会暴露给 Agent。
 
-runner 优先用 bubblewrap 为每个 job 建立独立 user/pid/network/ipc/uts/mount namespace。Docker Desktop 默认禁止非特权 user namespace，因此另有经过实测的受限 chroot fallback：runner 只持有 `CHOWN`/`DAC_OVERRIDE`/`KILL`/`SETGID`/`SETUID`/`SYS_CHROOT`，构造私有只读 runtime 与 Skill 根后切换到每-job 唯一 UID，Linux 自动清空子进程 capabilities。两条路径都提供私有可写 work/tmp 并清空环境变量；子进程看不到控制 socket、`/proc`、Sol 凭据、容器根或其他 job。`.sh`、`.py`、`.js` 分别绑定固定解释器，上传包的 shebang 不参与选择。
+Compose 中只有 `opensandbox` 控制面持有 Docker socket；`api` 没有 Docker socket 挂载。默认控制面配置为 bridge 网络、每 sandbox 64 PID、`no-new-privileges`、危险 capabilities 丢弃、最长 120 秒，并通过 OpenSandbox egress sidecar 默认拒绝出站网络。生产环境应固定 OpenSandbox、execd、egress 与执行镜像版本，并将 `Skills__OpenSandboxApiKey` 注入到密钥管理系统。
 
 ```bash
-# 构建并启动；若 runner 或 bubblewrap 不健康，Agent 会隐藏 run_skill_script，
-# 但 load_skill 与普通资源仍然可用。
-docker compose up -d --build skill-runner
-
-docker compose logs skill-runner
-ls -l src/Sol.Api/storage/runner/runner.sock
+docker compose up -d --build opensandbox
+docker compose logs opensandbox
+curl http://localhost:8090/health
 ```
 
-macOS Docker Desktop 的 VirtioFS 不能承载容器创建的 Unix socket，因此 compose 使用 Docker-managed `sol-runner-socket` volume，而不是宿主 bind mount。生产应把 API 与 runner 放进同一 Linux 编排单元并挂载这个 socket volume。若开发时仍从宿主运行 `Sol.Api`，它无法看见 VM 内 volume，`run_skill_script` 会被安全地隐藏；不要回退到公开 TCP，也不要为了启动 sibling container 而把 Docker socket 交给 API。runner 不可用时是可降级状态，不影响安装或加载 prose Skills。
-
-普通 sandbox escape 最多落在无网络、无 Sol secret、无其他用户文件的 runner 容器；容器/内核级逃逸不可能由应用层完全消除，需同时依赖固定最小镜像、内核更新、seccomp/no-new-privileges、cap drop 与资源上限。
+使用 Compose 时 API 自动连接 `opensandbox:8090`。宿主直接运行 `Sol.Api` 时，把 `Skills:SandboxEnabled` 设为 `true`、`Skills:OpenSandboxDomain` 设为 `localhost:8090`，并提供相同的 API Key。OpenSandbox 不可用时是可降级状态，不影响安装或读取 Skills。
 
 ## 部署
 

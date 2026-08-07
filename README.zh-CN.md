@@ -101,7 +101,10 @@ API 面向 Native AOT 构建。JSON 元数据使用源生成，Dapper 调用集�
 | `Ai:EncryptionKey` | 加密保存渠道 API Key 的密钥 |
 | `Ai:AssetRoot` | 旧版本本地素材的兼容读取目录；新素材默认写入 PostgreSQL 云端 blob |
 | `Realtime:Backplane` | 多个 API 节点时设为 `Redis` 以启用 SignalR backplane |
-| `Skills:RunnerSocketPath` | 连接隔离 Skill runner 的 Unix socket |
+| `Skills:SandboxEnabled` | 是否通过 OpenSandbox 执行已审批的 Skill 脚本 |
+| `Skills:OpenSandboxDomain` | OpenSandbox API 地址 |
+| `Skills:OpenSandboxApiKey` | OpenSandbox API Key；应保存在密钥管理服务中 |
+| `Skills:OpenSandboxImage` | 每次 Skill 执行使用的 OpenSandbox 镜像 |
 
 不要提交真实 pepper、加密密钥、渠道 API Key 或连接字符串。轮换 `DeviceIdentity:Pepper` 会使已有设备指纹失效；轮换 `Ai:EncryptionKey` 会导致已存储的渠道 Key 无法解密，除非先完成迁移。运维说明见 [docs/operations.md](docs/operations.md)。
 

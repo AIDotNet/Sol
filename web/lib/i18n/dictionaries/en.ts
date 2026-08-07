@@ -217,6 +217,9 @@ export const en: Dictionary = {
     emptyDescription: "Upload a Skill to give the Agent reusable expertise and workflows.",
     noDescription: "No description provided",
     containsScripts: "Contains scripts",
+    sandboxDisabled:
+      "The sandbox is disabled. Skill instructions and resources remain readable, but scripts cannot run.",
+    scriptsDisabled: "Scripts disabled",
     scanTitle: "Scan Skill package",
     scanning: "Scanning files and risks…",
     scanSummary: "{files} files · {size}",

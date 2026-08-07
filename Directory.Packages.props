@@ -15,6 +15,7 @@
   <ItemGroup Label="Infrastructure">
     <PackageVersion Include="StackExchange.Redis" Version="3.0.25" />
     <PackageVersion Include="RabbitMQ.Client" Version="7.2.1" />
+    <PackageVersion Include="Alibaba.OpenSandbox" Version="0.1.5" />
   </ItemGroup>
 
   <ItemGroup Label="Web / realtime">

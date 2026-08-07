@@ -97,7 +97,10 @@ Important settings include:
 | `Ai:EncryptionKey` | Key used to encrypt stored provider API keys |
 | `Ai:AssetRoot` | Legacy local-asset fallback directory; new media is stored in PostgreSQL cloud blobs by default |
 | `Realtime:Backplane` | Set to `Redis` when multiple API nodes share a SignalR backplane |
-| `Skills:RunnerSocketPath` | Unix socket used to reach the isolated Skill runner |
+| `Skills:SandboxEnabled` | Enables approved Skill script execution through OpenSandbox |
+| `Skills:OpenSandboxDomain` | OpenSandbox API address |
+| `Skills:OpenSandboxApiKey` | OpenSandbox API key; keep it in a secret store |
+| `Skills:OpenSandboxImage` | OpenSandbox image used for each Skill execution |
 
 Never commit real peppers, encryption keys, provider keys, or connection strings. Rotating `DeviceIdentity:Pepper` invalidates existing device fingerprints; rotating `Ai:EncryptionKey` makes stored provider keys undecryptable unless they are migrated first. Operational guidance is in [docs/operations.md](docs/operations.md).
 

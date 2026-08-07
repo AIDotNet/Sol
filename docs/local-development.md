@@ -28,12 +28,12 @@
 
 ```bash
 docker compose up -d --build
-docker compose ps          # Postgres / Redis / RabbitMQ healthy；skill-runner running
+docker compose ps          # Postgres / Redis / RabbitMQ healthy；opensandbox running
 
-# runner 通过 Docker-managed volume 内的 Unix socket 提供隔离脚本执行。
-# 宿主直接运行 Sol.Api 时看不到 Docker Desktop VM 内的 socket，因此 prose Skills
-# 正常可用，run_skill_script 自动隐藏；容器化部署时 API 与 runner 共享该 volume。
-docker compose ps skill-runner
+# OpenSandbox 通过 HTTP API 管理短生命周期容器。宿主直接运行 Sol.Api 时，将
+# Skills:SandboxEnabled 设为 true、Skills:OpenSandboxDomain 设为 localhost:8090，
+# 并配置与服务端相同的 API Key；Compose 部署会自动使用 opensandbox:8090。
+docker compose ps opensandbox
 
 dotnet run --project src/Sol.Api
 # 开发环境 RunMigrationsOnStartup=true，会自动建表

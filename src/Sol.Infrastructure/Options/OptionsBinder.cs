@@ -99,13 +99,17 @@ internal static class OptionsBinder
         var section = configuration.GetSection(SkillsOptions.SectionName);
         return new SkillsOptions
         {
+            SandboxEnabled = ReadBool(section["SandboxEnabled"], false),
             Root = section["Root"] ?? "./storage/skills",
             MaxUploadBytes = Math.Clamp(
                 ReadInt(section["MaxUploadBytes"], 25 * 1024 * 1024), 1_048_576, 52_428_800),
             MaxExtractedBytes = Math.Clamp(
                 ReadInt(section["MaxExtractedBytes"], 100 * 1024 * 1024), 1_048_576, 209_715_200),
             MaxEntries = Math.Clamp(ReadInt(section["MaxEntries"], 1_000), 10, 5_000),
-            RunnerSocketPath = section["RunnerSocketPath"] ?? "./storage/runner/runner.sock",
+            OpenSandboxDomain = section["OpenSandboxDomain"] ?? "localhost:8090",
+            OpenSandboxApiKey = section["OpenSandboxApiKey"] ?? string.Empty,
+            OpenSandboxImage = section["OpenSandboxImage"]
+                ?? "opensandbox/code-interpreter:v1.1.0",
             RunnerTimeoutSeconds = Math.Clamp(ReadInt(section["RunnerTimeoutSeconds"], 30), 1, 120),
             RunnerMaxOutputBytes = Math.Clamp(
                 ReadInt(section["RunnerMaxOutputBytes"], 256 * 1024), 16_384, 1_048_576),

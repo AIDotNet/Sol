@@ -210,6 +210,8 @@ export const zh = {
     emptyDescription: "上传一个 Skill，为 Agent 提供可复用的专业流程与知识。",
     noDescription: "未提供描述",
     containsScripts: "含脚本",
+    sandboxDisabled: "沙盒未启用。Skill 的说明与资源仍可读取，但其中的脚本不会执行。",
+    scriptsDisabled: "脚本已禁用",
     scanTitle: "扫描 Skill 包",
     scanning: "正在扫描文件与风险…",
     scanSummary: "{files} 个文件 · {size}",

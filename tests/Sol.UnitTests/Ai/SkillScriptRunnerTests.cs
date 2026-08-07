@@ -9,9 +9,20 @@ namespace Sol.UnitTests.Ai;
 public sealed class SkillScriptRunnerTests
 {
     [Fact]
+    public async Task Disabled_runner_never_executes_scripts()
+    {
+        var runner = new DisabledSkillScriptRunner(new SkillsOptions());
+
+        Assert.False(await runner.IsAvailableAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runner.RunAsync(
+            new SkillScriptRequest([], "script.py", [], null, TimeSpan.FromSeconds(1)),
+            CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Missing_socket_reports_unavailable()
     {
-        using var runner = Runner(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.sock"));
+        var runner = Runner();
 
         Assert.False(await runner.IsAvailableAsync(CancellationToken.None));
     }
@@ -22,7 +33,7 @@ public sealed class SkillScriptRunnerTests
     [InlineData("script.exe")]
     public async Task Unsafe_or_unsupported_script_paths_are_rejected(string scriptPath)
     {
-        using var runner = Runner(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.sock"));
+        var runner = Runner();
         var request = new SkillScriptRequest(
             [new SkillPackageFile(scriptPath, Encoding.UTF8.GetBytes("print('unsafe')"))],
             scriptPath,
@@ -37,7 +48,7 @@ public sealed class SkillScriptRunnerTests
     [Fact]
     public async Task Script_must_belong_to_the_submitted_package()
     {
-        using var runner = Runner(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.sock"));
+        var runner = Runner();
         var request = new SkillScriptRequest(
             [new SkillPackageFile("SKILL.md", Encoding.UTF8.GetBytes("instructions"))],
             "script.py",
@@ -52,7 +63,7 @@ public sealed class SkillScriptRunnerTests
     [Fact]
     public async Task Timeout_cannot_exceed_configured_limit()
     {
-        using var runner = Runner(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.sock"));
+        var runner = Runner();
         var request = new SkillScriptRequest(
             [new SkillPackageFile("script.py", Encoding.UTF8.GetBytes("print('ok')"))],
             "script.py",
@@ -64,10 +75,10 @@ public sealed class SkillScriptRunnerTests
             runner.RunAsync(request, CancellationToken.None));
     }
 
-    private static UnixSocketSkillScriptRunner Runner(string socketPath) => new(
+    private static OpenSandboxSkillScriptRunner Runner() => new(
         Microsoft.Extensions.Options.Options.Create(new SkillsOptions
         {
-            RunnerSocketPath = socketPath,
+            OpenSandboxDomain = "localhost:8090",
             RunnerTimeoutSeconds = 30,
             RunnerMaxOutputBytes = 256 * 1024,
             MaxEntries = 100,
