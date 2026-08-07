@@ -3,6 +3,10 @@ import type { NextConfig } from "next";
 const API_ORIGIN = process.env.SOL_API_ORIGIN ?? "http://localhost:5298";
 
 const nextConfig: NextConfig = {
+  // Self-contained server bundle (.next/standalone) for the Docker image, so the runtime stage
+  // doesn't need node_modules or the full source tree copied in.
+  output: "standalone",
+
   // The dev-only overlay badge sits in a corner, and the canvas uses all four: toolbars top,
   // zoom controls bottom-left, minimap bottom-right. It was covering the zoom controls.
   // Development-only — this changes nothing about a production build.

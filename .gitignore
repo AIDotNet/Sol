@@ -7,6 +7,9 @@ generated/
 publish/
 artifacts/
 
+## Test output (Playwright/vitest run-state, not source)
+test-results/
+
 ## Rider / VS / VS Code
 .idea/
 .vs/

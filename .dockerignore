@@ -1,0 +1,10 @@
+bin/
+obj/
+**/bin/
+**/obj/
+.git/
+.claude/
+web/node_modules/
+web/.next/
+storage/
+test-results/

@@ -97,6 +97,63 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Native AOT build of Sol.Api (see src/Sol.Api/Dockerfile for the SDK/toolchain notes).
+  # Containerized so it can share the skill-runner's Unix socket volume — the production
+  # setup docs/operations.md calls for — which a host-run `dotnet run` cannot see.
+  api:
+    build:
+      context: .
+      dockerfile: src/Sol.Api/Dockerfile
+    container_name: sol-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "5298:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Postgres__ConnectionString: "Host=postgres;Port=5432;Database=sol;Username=sol;Password=sol_dev_password"
+      Postgres__RunMigrationsOnStartup: "true"
+      Redis__Configuration: "redis:6379"
+      Redis__InstanceName: "sol:"
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__UserName: sol
+      RabbitMq__Password: sol_dev_password
+      Realtime__Backplane: "None"
+      Authentication__PublicOrigin: "http://localhost:3000"
+      # Same dev-only placeholders as appsettings.Development.json — never reuse in production.
+      DeviceIdentity__Pepper: "dev-only-pepper-do-not-use-in-production"
+      Ai__EncryptionKey: "c29sLWRldi1rZXktbm90LWZvci1wcm9kdWN0aW9uISE="
+      # Points at the same socket skill-runner listens on, via the shared volume below.
+      Skills__RunnerSocketPath: "/run/sol/runner.sock"
+    volumes:
+      - sol-runner-socket:/run/sol
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_SITE_URL: http://localhost:3000
+        API_BASE_URL: http://api:8080
+        SOL_API_ORIGIN: http://api:8080
+    container_name: sol-web
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    environment:
+      # Rewrites in next.config.ts and server-side fetches both need the in-network API address.
+      SOL_API_ORIGIN: http://api:8080
+      API_BASE_URL: http://api:8080
+    restart: unless-stopped
+
 volumes:
   sol-pgdata:
   sol-redisdata:
