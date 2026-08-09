@@ -35,6 +35,19 @@ export function AuthMenu() {
   const label = account?.displayName ?? t("auth.guest");
   const initials = account?.displayName.trim().slice(0, 1).toUpperCase() ?? "G";
 
+  if (isGuest && github) {
+    return (
+      <Button
+        size="sm"
+        variant="default"
+        onPress={() => login(github.key)}
+      >
+        <GitBranch className="size-3.5" aria-hidden />
+        {t("auth.loginWith", { provider: github.displayName })}
+      </Button>
+    );
+  }
+
   return (
     <div ref={rootRef} className="relative">
       <Button
