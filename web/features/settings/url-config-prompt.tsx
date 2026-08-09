@@ -39,6 +39,7 @@ export function UrlConfigPrompt() {
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [appliedCount, setAppliedCount] = useState<number | null>(null);
   const [providersReady, setProvidersReady] = useState(false);
   const autoApplyStarted = useRef(false);
 
@@ -108,8 +109,9 @@ export function UrlConfigPrompt() {
         });
         await refresh();
 
+        router.replace(urlWithoutQuickConfig(window.location.href), { scroll: false });
         if (!silent) {
-          window.alert(t("urlConfig.applied", { count: created + updated }));
+          setAppliedCount(created + updated);
         }
         dismiss();
       } catch (error) {
@@ -118,7 +120,7 @@ export function UrlConfigPrompt() {
         setBusy(false);
       }
     },
-    [dismiss, refresh, resolved, t],
+    [dismiss, refresh, resolved, router, t],
   );
 
   // `autoApply` is intentionally weaker than a user confirmation: it is honored only when the
@@ -151,6 +153,26 @@ export function UrlConfigPrompt() {
         </DialogHeader>
         <DialogFooter>
           <Button size="sm" onPress={dismiss}>
+            {t("common.close")}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    );
+  }
+
+  if (appliedCount !== null) {
+    return (
+      <Dialog
+        isOpen
+        onOpenChange={() => setAppliedCount(null)}
+        className="w-[min(24rem,calc(100vw-2rem))] max-w-none sm:max-w-none"
+      >
+        <DialogHeader>
+          <DialogTitle>{t("urlConfig.title")}</DialogTitle>
+          <DialogDescription>{t("urlConfig.applied", { count: appliedCount })}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button size="sm" onPress={() => setAppliedCount(null)}>
             {t("common.close")}
           </Button>
         </DialogFooter>

@@ -23,6 +23,7 @@ Library/
 ## Secrets — the device fingerprint pepper and connection strings must never be committed
 *.env
 .env.*
+!.env.example
 appsettings.*.local.json
 secrets.json
 

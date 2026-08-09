@@ -80,7 +80,11 @@ import {
   resolveCanvas,
   type SaveState,
 } from "@/features/canvas/sync";
-import type { CanvasTemplateDefinition } from "@/features/canvas/templates";
+import {
+  CANVAS_TEMPLATES,
+  instantiateCanvasTemplate,
+  type CanvasTemplateDefinition,
+} from "@/features/canvas/templates";
 import { NODE_DEFAULT_SIZE, type NodeKind } from "@/features/canvas/types";
 import { wouldCreateCycle } from "@/features/canvas/upstream";
 import { SettingsDialog } from "@/features/settings/settings-dialog";
@@ -121,6 +125,11 @@ const PRO_OPTIONS = { hideAttribution: true };
 // to 3x and fill the screen with a single text box.
 const FIT_VIEW_OPTIONS = { maxZoom: 1, padding: 0.2 };
 const DELETE_KEY_CODES = ["Backspace", "Delete"];
+const FIRST_VISIT_TEMPLATE = CANVAS_TEMPLATES.find((template) => template.id === "text-to-image")!;
+
+function newCanvasGraphId(): string {
+  return crypto.randomUUID();
+}
 
 /** Debounce for autosave. Long enough that a drag or a burst of typing is one write. */
 const AUTOSAVE_DELAY_MS = 400;
@@ -161,7 +170,14 @@ export function CanvasPage() {
         // mounts, and a named project is more use than an implicit unnamed one — it gives the
         // project menu a starting entry instead of an empty list.
         if (canvases.length === 0) {
-          canvases = [summarize(await createCanvas(t("canvas.defaultProject")))];
+          canvases = [
+            summarize(
+              await createCanvas(
+                t("canvas.defaultProject"),
+                instantiateCanvasTemplate(FIRST_VISIT_TEMPLATE, newCanvasGraphId),
+              ),
+            ),
+          ];
         }
 
         const remembered = lastOpenedCanvas();

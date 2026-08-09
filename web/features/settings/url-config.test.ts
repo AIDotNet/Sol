@@ -235,6 +235,13 @@ describe("maskApiKey", () => {
   });
 });
 
+describe("urlWithoutQuickConfig", () => {
+  it("removes the config from both query and hash while preserving other parameters", () => {
+    expect(urlWithoutQuickConfig("https://sol.example/settings?tab=ai&settings=query#view=all&settings=hash"))
+      .toBe("/settings?tab=ai#view=all");
+  });
+});
+
 describe("parseQuickConfigFromLocation", () => {
   const payload = JSON.stringify({ providers: [{ builtinId: "openai", apiKey: "sk-hash" }] });
 

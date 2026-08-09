@@ -78,7 +78,7 @@ Hash 和 query 同时存在时优先使用 hash。hash 中存在格式错误的 
 
 ### 3.2 内置服务商
 
-内置服务商只需要 `builtinId`，以及可选的 `apiKey`：
+内置服务商只需要 `builtinId`，以及可选的 `apiKey`；不需要提供 `models`。如果当前设备已经存在相同 `builtinId` 的渠道，最小载荷只会更新 URL 中显式提供的字段，例如仅更新 API Key，不会要求重复提交模型、名称、协议或 Base URL。
 
 ```json
 {
@@ -86,6 +86,35 @@ Hash 和 query 同时存在时优先使用 hash。hash 中存在格式错误的 
   "apiKey": "sk-example"
 }
 ```
+
+例如，以下载荷可一次为 OpenAI、Anthropic、OpenRouter 和 Routin AI 填充或替换 Key。每个渠道都省略了 `models`，因此 OpenAI、Anthropic 和 Routin AI 会自动带入其当前预设中的全部模型：
+
+```json
+{
+  "providers": [
+    {
+      "builtinId": "openai",
+      "apiKey": "your-openai-api-key"
+    },
+    {
+      "builtinId": "anthropic",
+      "apiKey": "your-anthropic-api-key"
+    },
+    {
+      "builtinId": "openrouter",
+      "apiKey": "your-openrouter-api-key"
+    },
+    {
+      "builtinId": "routin-ai",
+      "apiKey": "your-routin-ai-api-key"
+    }
+  ]
+}
+```
+
+OpenRouter 当前没有内置默认模型；上述导入会创建或更新 OpenRouter 渠道和 Key，但不会添加模型。请在设置页手动添加模型，或使用“拉取模型”获取 OpenRouter 上游可用模型。
+
+将这段 JSON 按本文“生成链接”中的方式编码为 `base64url` 后，即可生成导入链接。若只需要添加某个内置渠道而不设置 Key，则只传对应的 `builtinId`，例如 `{ "builtinId": "routin-ai" }`。
 
 `builtinId` 必须存在于当前前端预设目录。下表是当前预设快照，模型数量会随预设版本变化：
 
@@ -102,7 +131,7 @@ Hash 和 query 同时存在时优先使用 hash。hash 中存在格式错误的 
 | `ollama` | Ollama | `openai-chat` | `http://localhost:11434/v1` | 0 |
 | `routin-ai` | Routin AI | `openai-chat` | `https://api.routin.ai/v1` | 103 |
 
-内置服务商省略的名称、协议、Base URL、描述、预设版本和模型由预设补全。若 URL 显式提供这些字段，则显式值优先。打开页面时如果当前设备已经存在同一 `builtinId`，会按 ID 更新，不会重复创建渠道；已有模型设置不会被 URL 中的预设模型覆盖。
+内置服务商省略的名称、协议、Base URL、描述、预设版本和模型由预设补全。若 URL 显式提供这些字段，则显式值优先。打开页面时如果当前设备已经存在同一 `builtinId`，会按 ID 更新，不会重复创建渠道；当 URL 仅包含 `builtinId` 和 `apiKey` 时，已有渠道的名称、协议、Base URL 和模型设置会被保留。已有模型设置不会被 URL 中的预设模型覆盖。
 
 `ollama` 预设声明无需 API Key；其他内置服务商通常需要 Key。是否自动导入仍由 `autoApply` 和 URL 是否携带 Key 决定。
 

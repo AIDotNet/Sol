@@ -71,3 +71,8 @@ Authentication__GitHub__Scope=read:user user:email
 
 `Authentication:PublicOrigin` 必须是浏览器看到的 origin。开发环境 Next.js rewrite 会将上述
 回调转发到 API；生产环境应让前端和 API 共享一个反向代理 origin。
+
+使用 Docker Compose 时，从根目录 `.env.example` 创建未提交的 `.env`，填写
+`PUBLIC_ORIGIN`、`GITHUB_OAUTH_CLIENT_ID` 与 `GITHUB_OAUTH_CLIENT_SECRET`，并将
+`GITHUB_OAUTH_ENABLED` 设为 `true`。重新构建 `web` 与 `api` 后，GitHub 登录按钮会自动
+出现在账户菜单中。

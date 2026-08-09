@@ -1,5 +1,6 @@
 import type { TranslationKey } from "@/components/providers/i18n-provider";
-import type { CanvasNodeData, NodeKind } from "@/features/canvas/types";
+import type { CanvasEdge, CanvasNode } from "@/features/canvas/store";
+import { NODE_DEFAULT_SIZE, type CanvasNodeData, type NodeKind } from "@/features/canvas/types";
 
 /** Identifiers for the built-in, connected workflow examples. */
 export type CanvasTemplateId = "text-to-image" | "reference-to-image" | "image-to-video";
@@ -23,6 +24,34 @@ export interface CanvasTemplateDefinition {
   descriptionKey: TranslationKey;
   nodes: readonly CanvasTemplateNodeSpec[];
   edges: readonly CanvasTemplateEdgeSpec[];
+}
+
+/** Turns a template definition into a graph that can be stored as a canvas document. */
+export function instantiateCanvasTemplate(
+  template: CanvasTemplateDefinition,
+  createId: () => string,
+): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
+  const ids = new Map(template.nodes.map((node) => [node.key, createId()]));
+
+  return {
+    nodes: template.nodes.map((node) => {
+      const size = NODE_DEFAULT_SIZE[node.kind];
+      return {
+        id: ids.get(node.key)!,
+        type: node.kind,
+        position: node.position,
+        data: (node.data ?? {}) as CanvasNode["data"],
+        width: size.width,
+        height: size.height,
+      };
+    }),
+    edges: template.edges.map((edge) => ({
+      id: createId(),
+      source: ids.get(edge.source)!,
+      target: ids.get(edge.target)!,
+      type: "default",
+    })),
+  };
 }
 
 /**
