@@ -101,7 +101,11 @@ services:
       RabbitMq__UserName: sol
       RabbitMq__Password: sol_dev_password
       Realtime__Backplane: "None"
-      Authentication__PublicOrigin: "http://localhost:3000"
+      Authentication__PublicOrigin: "${PUBLIC_ORIGIN:-http://localhost:3000}"
+      Authentication__GitHub__Enabled: "${GITHUB_OAUTH_ENABLED:-false}"
+      Authentication__GitHub__ClientId: "${GITHUB_OAUTH_CLIENT_ID:-}"
+      Authentication__GitHub__ClientSecret: "${GITHUB_OAUTH_CLIENT_SECRET:-}"
+      Authentication__GitHub__Scope: "read:user user:email"
       # Same dev-only placeholders as appsettings.Development.json — never reuse in production.
       DeviceIdentity__Pepper: "dev-only-pepper-do-not-use-in-production"
       Ai__EncryptionKey: "c29sLWRldi1rZXktbm90LWZvci1wcm9kdWN0aW9uISE="
@@ -116,7 +120,7 @@ services:
     build:
       context: ./web
       args:
-        NEXT_PUBLIC_SITE_URL: http://localhost:3000
+        NEXT_PUBLIC_SITE_URL: ${PUBLIC_ORIGIN:-http://localhost:3000}
         API_BASE_URL: http://api:8080
         SOL_API_ORIGIN: http://api:8080
     container_name: sol-web
