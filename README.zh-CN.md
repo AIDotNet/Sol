@@ -158,6 +158,18 @@ Sol 默认使用确定性的 `device_id` 隔离游客数据。GitHub 登录成�
 
 项目仍在积极开发中。将实例暴露到公网前，请先阅读安全和运维文档。
 
+## 特别感谢
+
+<div>
+   <div align="left">
+      <h1>RoutinAI</h1>
+      <a href="https://routin.ai/"><img width="154" height="151" src="https://routin.ai/favicon.png" alt="RoutinAI" /></a>
+   </div>
+   <p><a href="https://routin.ai/">RoutinAI</a> 是一个企业级统一 LLM API 网关，提供单一、类型安全的接口，可访问来自 GPT、Claude 和 Gemini 系列的 100 多个主流大语言模型，包括 gpt-5.6-sol、claude-opus-5 和 gemini-3.1-pro-preview 等模型。它通过提供零延迟边缘路由、无需修改代码即可无缝切换模型、统一计费以及带有消费上限和访问策略的集中治理，消除了管理多个 AI 供应商的复杂性。</p>
+</div>
+
+点击链接加入群聊：[Agents](https://qm.qq.com/q/NfPY52m8KK)。
+
 ## 许可证
 
 Sol 使用 [MIT License](LICENSE) 发布。版权所有 © 2026 AIDotNet。

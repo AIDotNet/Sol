@@ -154,6 +154,18 @@ Uploaded assets are validated by MIME type and file signature. External referenc
 
 This project is still under active development. Review the security and operations documentation before exposing an instance to the public internet.
 
+## Special Thanks
+
+<div>
+   <div align="left">
+      <h1>RoutinAI</h1>
+      <a href="https://routin.ai/"><img width="154" height="151" src="https://routin.ai/favicon.png" alt="RoutinAI" /></a>
+   </div>
+   <p><a href="https://routin.ai/">RoutinAI</a> is an enterprise-grade unified LLM API gateway that provides a single, type-safe interface to access over 100 leading large language models from the GPT, Claude, and Gemini families, including models such as gpt-5.6-sol, claude-opus-5, and gemini-3.1-pro-preview. It eliminates the complexity of managing multiple AI vendors by providing zero-latency edge routing, seamless model switching without code modifications, unified billing, and centralized governance with spending caps and access policies.</p>
+</div>
+
+Join the [Agents QQ group](https://qm.qq.com/q/NfPY52m8KK).
+
 ## License
 
 Sol is released under the [MIT License](LICENSE). Copyright © 2026 AIDotNet.
