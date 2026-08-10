@@ -3,9 +3,9 @@ import type { ModelCategory, ProviderType } from "@/features/ai/types";
 /**
  * A built-in provider template.
  *
- * `version` is monotonic: bumping it signals that the preset's values should replace what a
- * device already persisted. Without it there is no way to ship a corrected base URL or a new
- * model to existing users without also clobbering their own edits.
+ * `version` is monotonic: bumping it signals that the preset has new defaults to apply to a
+ * device that already persisted it. Model upgrades are absent-only so existing user edits remain
+ * authoritative.
  */
 export interface ProviderPreset {
   builtinId: string;
@@ -26,6 +26,8 @@ export interface PresetModel {
   modelKey: string;
   name: string;
   category: ModelCategory;
+  /** Preset version that first shipped this model. Used to add only new defaults on upgrade. */
+  introducedInVersion?: number;
   /** Protocol override; omit to inherit the provider's. */
   type?: ProviderType;
   enabled?: boolean;

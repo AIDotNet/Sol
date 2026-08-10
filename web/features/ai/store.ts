@@ -41,6 +41,23 @@ function autoSeedStorageKey(builtinId: string): string {
   return `sol.auto-seeded.${builtinId}`;
 }
 
+function presetModelInput(
+  model: NonNullable<ReturnType<typeof findPreset>>["defaultModels"][number],
+): api.CreateModelInput {
+  return {
+    modelKey: model.modelKey,
+    name: model.name,
+    category: model.category,
+    type: model.type ?? null,
+    contextLength: model.contextLength ?? null,
+    maxOutputTokens: model.maxOutputTokens ?? null,
+    supportsVision: model.supportsVision ?? false,
+    supportsFunctionCall: model.supportsFunctionCall ?? false,
+    supportsThinking: model.supportsThinking ?? false,
+    enabled: model.enabled ?? true,
+  };
+}
+
 async function seedBuiltinProviders(
   providers: AiProvider[],
   createProvider: (input: api.CreateProviderInput) => Promise<AiProvider>,
@@ -71,18 +88,7 @@ async function seedBuiltinProviders(
         type: preset.type,
         baseUrl: preset.defaultBaseUrl,
         presetVersion: preset.version,
-        models: preset.defaultModels.map((model) => ({
-          modelKey: model.modelKey,
-          name: model.name,
-          category: model.category,
-          type: model.type ?? null,
-          contextLength: model.contextLength ?? null,
-          maxOutputTokens: model.maxOutputTokens ?? null,
-          supportsVision: model.supportsVision ?? false,
-          supportsFunctionCall: model.supportsFunctionCall ?? false,
-          supportsThinking: model.supportsThinking ?? false,
-          enabled: model.enabled ?? true,
-        })),
+        models: preset.defaultModels.map(presetModelInput),
       });
       seeded = true;
     } catch {
@@ -92,6 +98,48 @@ async function seedBuiltinProviders(
   }
 
   return seeded;
+}
+
+/** Adds defaults introduced after a built-in provider was created, without touching existing
+ * model rows. The import endpoint is absent-only, so user edits remain authoritative. */
+async function upgradeBuiltinProviderModels(providers: AiProvider[]): Promise<boolean> {
+  let upgraded = false;
+
+  for (const provider of providers) {
+    const preset = findPreset(provider.builtinId);
+    if (!preset) continue;
+
+    // Built-in providers created before preset versions were persisted are the original v1.
+    const currentVersion = provider.presetVersion ?? 1;
+    if (currentVersion >= preset.version) continue;
+
+    const newModels = preset.defaultModels.filter(
+      (model) => (model.introducedInVersion ?? 1) > currentVersion,
+    );
+
+    try {
+      await api.importConfig({
+        providers: [
+          {
+            builtinId: preset.builtinId,
+            name: provider.name,
+            description: provider.description ?? null,
+            icon: provider.icon ?? null,
+            presetVersion: preset.version,
+            type: provider.type,
+            apiKey: null,
+            baseUrl: provider.baseUrl,
+            models: newModels.map(presetModelInput),
+          },
+        ],
+      });
+      upgraded = true;
+    } catch {
+      // Best-effort. Keeping the old version makes the next load retry the missing-model import.
+    }
+  }
+
+  return upgraded;
 }
 
 interface AiState {
@@ -179,8 +227,10 @@ export const useAiStore = create<AiState>((set, get) => ({
     providerLoadPromise = (async () => {
       await get().refresh();
 
-      const seeded = await seedBuiltinProviders(get().providers, api.createProvider);
-      if (seeded) await get().refresh();
+      const providers = get().providers;
+      const upgraded = await upgradeBuiltinProviderModels(providers);
+      const seeded = await seedBuiltinProviders(providers, api.createProvider);
+      if (upgraded || seeded) await get().refresh();
     })().finally(() => {
       providerLoadPromise = null;
     });

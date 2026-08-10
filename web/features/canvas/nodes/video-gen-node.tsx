@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useT } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { fixedVideoResolution } from "@/features/ai/video-models";
 import { runVideoNode } from "@/features/canvas/execution";
 import { ChipRow, ModelPicker, useSelection } from "@/features/canvas/nodes/model-picker";
 import { NodeShell } from "@/features/canvas/nodes/node-shell";
@@ -63,9 +64,12 @@ export function VideoGenNode({ id, data, selected }: NodeProps) {
   const protocol = selection?.protocol;
   const isSeedance = protocol === "seedance-video";
   const seedanceInputMode = nodeData.seedanceInputMode ?? DEFAULT_SEEDANCE_INPUT_MODE;
-  const resolutions = protocol === "xai-video"
-    ? RESOLUTIONS.filter((value) => value !== "1080p")
-    : RESOLUTIONS;
+  const fixedResolution = selection ? fixedVideoResolution(selection.model.modelKey) : null;
+  const resolutions = fixedResolution
+    ? [fixedResolution]
+    : protocol === "xai-video"
+      ? RESOLUTIONS.filter((value) => value !== "1080p")
+      : RESOLUTIONS;
 
   return (
     <>
@@ -143,7 +147,7 @@ export function VideoGenNode({ id, data, selected }: NodeProps) {
               <ChipRow
                 label={t("node.resolution")}
                 options={resolutions}
-                value={nodeData.resolution ?? "720p"}
+                value={fixedResolution ?? nodeData.resolution ?? "720p"}
                 onChange={(resolution) => updateNodeData(id, { resolution })}
               />
 

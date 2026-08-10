@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -29,21 +29,7 @@ internal sealed class OpenAiVideoClient(
         var client = httpClientFactory.CreateClient("upstream");
         var baseUrl = request.Provider.BaseUrl.TrimEnd('/');
 
-        var body = new JsonObject
-        {
-            ["model"] = request.ModelKey,
-            ["prompt"] = request.Prompt,
-        };
-
-        if (request.DurationSeconds is { } duration)
-        {
-            body["seconds"] = duration.ToString();
-        }
-
-        if (SizeFor(request.Aspect, request.Resolution) is { } size)
-        {
-            body["size"] = size;
-        }
+        var body = BuildRequestBody(request);
 
         using var message = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/videos")
         {
@@ -121,7 +107,7 @@ internal sealed class OpenAiVideoClient(
                 // The content is fetched from a sub-resource rather than returned inline.
                 "completed" => new VideoPollResult(
                     VideoJobState.Succeeded, 1, $"{baseUrl}/videos/{upstreamJobId}/content", null),
-                "failed" => new VideoPollResult(
+                "failed" or "cancelled" => new VideoPollResult(
                     VideoJobState.Failed, null, null, ReadError(root) ?? "Generation failed."),
                 "in_progress" or "processing" => new VideoPollResult(
                     VideoJobState.Running, progress, null, null),
@@ -135,24 +121,98 @@ internal sealed class OpenAiVideoClient(
         }
     }
 
+    internal static JsonObject BuildRequestBody(VideoGenerationRequest request)
+    {
+        if (request.Provider.BuiltinId == "routin-ai")
+        {
+            var content = new JsonArray();
+            foreach (var image in request.ReferenceImages)
+            {
+                content.Add((JsonNode)new JsonObject
+                {
+                    ["type"] = "image_url",
+                    ["role"] = "reference_image",
+                    ["image_url"] = new JsonObject
+                    {
+                        ["url"] = $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}",
+                    },
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Prompt))
+            {
+                content.Add((JsonNode)new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = request.Prompt,
+                });
+            }
+
+            var routinBody = new JsonObject
+            {
+                ["model"] = request.ModelKey,
+                ["prompt"] = request.Prompt,
+                ["content"] = content,
+            };
+
+            if (request.Aspect is not null) routinBody["ratio"] = request.Aspect;
+            var resolution = FixedResolution(request.ModelKey) ?? request.Resolution;
+            if (resolution is not null) routinBody["resolution"] = resolution;
+            if (request.DurationSeconds is { } duration) routinBody["duration"] = duration;
+
+            return routinBody;
+        }
+
+        var body = new JsonObject
+        {
+            ["model"] = request.ModelKey,
+            ["prompt"] = request.Prompt,
+        };
+
+        if (request.DurationSeconds is { } seconds) body["seconds"] = seconds.ToString();
+        if (SizeFor(request.ModelKey, request.Aspect, request.Resolution) is { } size)
+        {
+            body["size"] = size;
+        }
+
+        return body;
+    }
+
     /// <summary>
     /// Maps an aspect ratio and resolution to the discrete sizes the API accepts.
     /// </summary>
     /// <remarks>
     /// Sora takes a pixel size, not a ratio, and rejects anything outside its supported set.
     /// </remarks>
-    private static string? SizeFor(string? aspect, string? resolution)
+    internal static string? SizeFor(string modelKey, string? aspect, string? resolution)
     {
         if (aspect is null) return null;
 
         var tall = aspect is "9:16" or "3:4" or "2:3";
+        var fixedResolution = FixedResolution(modelKey);
 
-        return resolution switch
+        return (fixedResolution ?? resolution) switch
         {
             "1080p" => tall ? "1080x1920" : "1920x1080",
             "480p" => tall ? "480x854" : "854x480",
             _ => tall ? "720x1280" : "1280x720",
         };
+    }
+
+    private static string? FixedResolution(string modelKey)
+    {
+        var normalized = modelKey.Trim().ToLowerInvariant();
+        if (!normalized.StartsWith("sd-mini-", StringComparison.Ordinal)
+            && !normalized.StartsWith("sd-fast-", StringComparison.Ordinal)
+            && !normalized.StartsWith("sd-2.0-", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return normalized.EndsWith("-1080p", StringComparison.Ordinal) ? "1080p"
+            : normalized.EndsWith("-720p", StringComparison.Ordinal) ? "720p"
+            : normalized.EndsWith("-480p", StringComparison.Ordinal) ? "480p"
+            : null;
     }
 
     private static string? ReadError(JsonElement root) =>
