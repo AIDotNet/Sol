@@ -7,6 +7,7 @@ using Sol.Application.Abstractions.Persistence;
 using Sol.Application.Abstractions.Realtime;
 using Sol.Application.Abstractions.Security;
 using Sol.Application.Contracts.Agent;
+using Sol.Application.Features.Identity;
 using Sol.Domain.Ai;
 using Sol.Domain.Identity;
 
@@ -16,6 +17,7 @@ namespace Sol.Application.Features.Agent;
 public sealed class AgentTurnRunner(
     IAgentRepository agents,
     IProviderRepository providers,
+    BackgroundAccountScope accountScope,
     IMcpServerRepository mcpServers,
     IApiKeyProtector protector,
     IAgentModelDispatcher models,
@@ -35,6 +37,11 @@ public sealed class AgentTurnRunner(
     {
         var run = await agents.FindRunByIdAsync(runId, ct);
         if (run is null || run.Status != AgentRunStatus.Queued) return;
+
+        // This fresh background scope did not pass through account authentication middleware.
+        // Restore the run device's current account before resolving providers and later canvas,
+        // asset, skill, and MCP resources that may belong to another linked device.
+        await accountScope.RestoreForDeviceAsync(run.DeviceId, ct);
 
         var provider = run.ProviderId is { } providerId
             ? await providers.FindAsync(run.DeviceId, providerId, ct)

@@ -276,6 +276,7 @@ export const zh = {
     autoArrange: "自动排列",
     fitView: "适应视图",
     deleteNode: "删除节点",
+    deleteConnection: "删除连接",
     duplicateNode: "复制节点",
     undo: "撤销",
     redo: "重做",

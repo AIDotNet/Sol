@@ -238,6 +238,27 @@ test("a node context menu can duplicate and delete", async ({ page }) => {
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
 });
 
+test("an edge context menu can delete a connection", async ({ page }) => {
+  await establishDevice(page);
+  await page.goto("/");
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 15_000 });
+
+  const edges = page.locator(".react-flow__edge");
+  const initialCount = await edges.count();
+
+  await page.getByRole("button", { name: "工作流模板", exact: true }).click();
+  await page.getByRole("button", { name: /^文生图/ }).click();
+  await expect(edges).toHaveCount(initialCount + 1);
+
+  await edges.last().locator(".react-flow__edge-interaction").click({ button: "right" });
+  await page.getByText("删除连接", { exact: true }).click();
+  await expect(edges).toHaveCount(initialCount);
+
+  await waitForSaved(page);
+  await page.reload();
+  await expect(edges).toHaveCount(initialCount);
+});
+
 test("nodes can be automatically arranged from the canvas toolbar", async ({ page }) => {
   await establishDevice(page);
   await page.goto("/");

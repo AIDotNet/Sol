@@ -276,7 +276,12 @@ function CanvasInner({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [background, setBackground] = useState<BackgroundVariant | "none">(BackgroundVariant.Dots);
-  const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    nodeId: string | null;
+    edgeId: string | null;
+  } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const wrapperRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -622,12 +627,18 @@ function CanvasInner({
 
   const onPaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
     event.preventDefault();
-    setMenu({ x: event.clientX, y: event.clientY, nodeId: null });
+    setMenu({ x: event.clientX, y: event.clientY, nodeId: null, edgeId: null });
   }, []);
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: { id: string }) => {
     event.preventDefault();
-    setMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
+    setMenu({ x: event.clientX, y: event.clientY, nodeId: node.id, edgeId: null });
+  }, []);
+
+  const onEdgeContextMenu = useCallback((event: React.MouseEvent, edge: { id: string }) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenu({ x: event.clientX, y: event.clientY, nodeId: null, edgeId: edge.id });
   }, []);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -694,6 +705,7 @@ function CanvasInner({
         onSelectionDragStop={onSelectionDragStop}
         onPaneContextMenu={onPaneContextMenu}
         onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
         onPaneClick={closeMenu}
         onDragOver={onDragOver}
         onDrop={onDrop}
@@ -869,6 +881,16 @@ function CanvasInner({
                   }}
                 />
               </>
+            ) : menu.edgeId ? (
+              <MenuItem
+                icon={Trash2}
+                label={t("canvas.deleteConnection")}
+                destructive
+                onSelect={() => {
+                  onEdgesChange([{ type: "remove", id: menu.edgeId! }]);
+                  setMenu(null);
+                }}
+              />
             ) : (
               <>
                 {(

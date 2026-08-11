@@ -285,6 +285,7 @@ export const en: Dictionary = {
     autoArrange: "Auto arrange",
     fitView: "Fit view",
     deleteNode: "Delete node",
+    deleteConnection: "Delete connection",
     duplicateNode: "Duplicate node",
     undo: "Undo",
     redo: "Redo",

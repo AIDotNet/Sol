@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Sol.Application.Abstractions.Ai;
 using Sol.Application.Abstractions.Persistence;
 using Sol.Application.Abstractions.Security;
+using Sol.Application.Features.Identity;
 using Sol.Domain.Ai;
 
 namespace Sol.Infrastructure.Ai;
@@ -85,6 +86,7 @@ internal sealed class VideoJobPoller(
         }
 
         var providers = scope.ServiceProvider.GetRequiredService<IProviderRepository>();
+        var accountScope = scope.ServiceProvider.GetRequiredService<BackgroundAccountScope>();
         var protector = scope.ServiceProvider.GetRequiredService<IApiKeyProtector>();
         var dispatcher = scope.ServiceProvider.GetRequiredService<IVideoGenerationDispatcher>();
         var assetStore = scope.ServiceProvider.GetRequiredService<IAssetStore>();
@@ -93,6 +95,11 @@ internal sealed class VideoJobPoller(
 
         foreach (var job in active)
         {
+            // Polling runs outside the authenticated request that submitted the video. Restore the
+            // current account owning this job's device so linked-device providers remain visible.
+            // The helper also clears a previous account when the next job belongs to a guest.
+            await accountScope.RestoreForDeviceAsync(job.DeviceId, ct);
+
             await AdvanceAsync(
                 job, jobs, providers, protector, dispatcher, assetStore, assets,
                 httpClientFactory, ct);

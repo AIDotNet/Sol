@@ -85,6 +85,32 @@ describe("node drag persistence revisions", () => {
   });
 });
 
+describe("edge deletion", () => {
+  it("removes a connection as one undoable, persistable edit", () => {
+    const source = useCanvasStore.getState().addNode("text", { x: 0, y: 0 });
+    const target = useCanvasStore.getState().addNode("imageGen", { x: 320, y: 0 });
+    useCanvasStore
+      .getState()
+      .onConnect({ source, target, sourceHandle: null, targetHandle: null });
+
+    const edgeId = useCanvasStore.getState().edges[0].id;
+    const historyBefore = useCanvasStore.getState().past.length;
+    const revisionBefore = useCanvasStore.getState().revision;
+
+    useCanvasStore.getState().onEdgesChange([{ type: "remove", id: edgeId }]);
+
+    expect(useCanvasStore.getState().edges).toEqual([]);
+    expect(useCanvasStore.getState().past).toHaveLength(historyBefore + 1);
+    expect(useCanvasStore.getState().revision).toBe(revisionBefore + 1);
+
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().edges.map((edge) => edge.id)).toEqual([edgeId]);
+
+    useCanvasStore.getState().redo();
+    expect(useCanvasStore.getState().edges).toEqual([]);
+  });
+});
+
 describe("undo history for node edits", () => {
   it("restores the text a burst of typing replaced", () => {
     // Regression: `updateNodeData` recorded no history at all, so Ctrl+Z skipped past the typing

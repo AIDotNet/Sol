@@ -103,6 +103,7 @@ public static class DependencyInjection
         services.AddScoped<IVideoJobRepository, VideoJobRepository>();
         services.AddScoped<IAgentRepository, AgentRepository>();
         services.AddScoped<ISkillRepository, SkillRepository>();
+        services.AddScoped<BackgroundAccountScope>();
         services.AddSingleton<MigrationRunner>();
     }
 
