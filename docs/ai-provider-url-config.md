@@ -129,7 +129,7 @@ OpenRouter 当前没有内置默认模型；上述导入会创建或更新 OpenR
 | `openrouter` | OpenRouter | `openai-chat` | `https://openrouter.ai/api/v1` | 0 |
 | `deepseek` | DeepSeek | `openai-chat` | `https://api.deepseek.com/v1` | 1 |
 | `ollama` | Ollama | `openai-chat` | `http://localhost:11434/v1` | 0 |
-| `routin-ai` | Routin AI | `openai-chat` | `https://api.routin.ai/v1` | 110 |
+| `routin-ai` | Routin AI | `openai-chat` | `https://api.routin.ai/v1` | 112 |
 
 内置服务商省略的名称、协议、Base URL、描述、预设版本和模型由预设补全。若 URL 显式提供这些字段，则显式值优先。打开页面时如果当前设备已经存在同一 `builtinId`，会按 ID 更新，不会重复创建渠道；当 URL 仅包含 `builtinId` 和 `apiKey` 时，已有渠道的名称、协议、Base URL 和模型设置会被保留。已有模型设置不会被 URL 中的预设模型覆盖。
 

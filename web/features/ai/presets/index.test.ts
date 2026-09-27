@@ -15,7 +15,7 @@ describe("Routin AI preset", () => {
   it("includes the SD video models with the OpenAI video protocol", () => {
     const preset = findPreset("routin-ai");
 
-    expect(preset?.version).toBe(2);
+    expect(preset?.version).toBe(3);
 
     for (const modelKey of SD_VIDEO_MODEL_KEYS) {
       expect(preset?.defaultModels.find((model) => model.modelKey === modelKey)).toMatchObject({

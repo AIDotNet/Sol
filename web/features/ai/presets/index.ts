@@ -250,7 +250,7 @@ const ollama: ProviderPreset = {
 
 const routinAi: ProviderPreset = {
   builtinId: "routin-ai",
-  version: 2,
+  version: 3,
   name: "Routin AI",
   description: "多模型聚合，OpenAI 兼容协议",
   type: "openai-chat",
@@ -747,6 +747,24 @@ const routinAi: ProviderPreset = {
       modelKey: "gpt-image-2-4k",
       name: "GPT Image 2 4K",
       category: "image",
+      type: "openai-images",
+      supportsVision: true,
+      enabled: true,
+    },
+    {
+      modelKey: "gpt-image-2.5-flare",
+      name: "GPT Image 2.5 Flare",
+      category: "image",
+      introducedInVersion: 3,
+      type: "openai-images",
+      supportsVision: true,
+      enabled: true,
+    },
+    {
+      modelKey: "gpt-image-2.5-sunburst",
+      name: "GPT Image 2.5 Sunburst",
+      category: "image",
+      introducedInVersion: 3,
       type: "openai-images",
       supportsVision: true,
       enabled: true,
