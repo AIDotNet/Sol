@@ -16,7 +16,9 @@ public static class DeviceEndpoints
     {
         var group = app.MapGroup("/api/v1/device").WithTags("device");
 
-        group.MapPost("/handshake", HandshakeAsync).WithName("DeviceHandshake");
+        group.MapPost("/handshake", HandshakeAsync)
+            .WithName("DeviceHandshake")
+            .RequireRateLimiting(RateLimitPolicies.Identity);
         group.MapGet("/me", GetCurrent).WithName("CurrentDevice");
 
         return app;

@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Sol.Application.Abstractions.Caching;
@@ -121,9 +122,22 @@ public static class DependencyInjection
         //
         // The generous timeout is deliberate — image generation routinely runs past a minute,
         // and the default 100s would surface a working model as a spurious failure.
+        //
+        // The connect callback is the SSRF guard for every user-influenced destination this
+        // client sees: provider base URLs, catalog checks, and download links returned by an
+        // upstream. It resolves, validates against PrivateNetworkPolicy, and connects to the
+        // validated addresses in one step, so neither a hostname rebinding between checks nor a
+        // redirect can reach loopback/private ranges unless AllowPrivateNetworks is enabled.
         services.AddHttpClient("upstream", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            ConnectCallback = UpstreamNetworkPolicy.ConnectCallback(options.AllowPrivateNetworks),
+            // A proxy would connect on our behalf and bypass the connect-time guard, so the
+            // upstream client always dials the validated addresses directly.
+            UseProxy = false,
         });
 
         services.AddSingleton<IUpstreamModelCatalog, UpstreamModelCatalog>();

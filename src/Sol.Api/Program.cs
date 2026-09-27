@@ -1,7 +1,10 @@
+using System.Threading.RateLimiting;
 using FluentValidation;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using Serilog;
+using Sol.Api;
 using Sol.Api.Auth;
 using Sol.Api.Endpoints;
 using Sol.Api.Extensions;
@@ -55,6 +58,33 @@ if (string.Equals(builder.Configuration["Realtime:Backplane"], "Redis", StringCo
 }
 
 builder.Services.AddOpenApi();
+
+// Per-IP fixed windows on the endpoints that write rows or dial a user-supplied host without a
+// prior credential. Generous by design (a shared NAT carries many browsers): the goal is to
+// make bulk row creation and outbound-probe loops expensive, not to cap a heavy user.
+builder.Services.AddRateLimiter(limiter =>
+{
+    limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    limiter.AddPolicy(RateLimitPolicies.Identity, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            PartitionKey(context), _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+            }));
+
+    limiter.AddPolicy(RateLimitPolicies.ConfigWrite, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            PartitionKey(context), _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+            }));
+});
+
+static string PartitionKey(HttpContext context) =>
+    context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
 var app = builder.Build();
 

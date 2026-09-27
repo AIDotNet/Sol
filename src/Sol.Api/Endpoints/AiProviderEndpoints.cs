@@ -28,10 +28,16 @@ public static class AiProviderEndpoints
         var group = app.MapGroup("/api/v1/ai").WithTags("ai");
 
         group.MapGet("/providers", ListAsync).WithName("ListProviders");
-        group.MapPost("/providers", CreateAsync).WithName("CreateProvider");
-        group.MapPatch("/providers/{id}", UpdateAsync).WithName("UpdateProvider");
+        group.MapPost("/providers", CreateAsync)
+            .WithName("CreateProvider")
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
+        group.MapPatch("/providers/{id}", UpdateAsync)
+            .WithName("UpdateProvider")
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
         group.MapDelete("/providers/{id}", DeleteAsync).WithName("DeleteProvider");
-        group.MapPost("/providers/{id}/check", CheckAsync).WithName("CheckProvider");
+        group.MapPost("/providers/{id}/check", CheckAsync)
+            .WithName("CheckProvider")
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
         group.MapGet("/providers/{id}/upstream-models", ListUpstreamModelsAsync)
             .WithName("ListUpstreamModels");
 

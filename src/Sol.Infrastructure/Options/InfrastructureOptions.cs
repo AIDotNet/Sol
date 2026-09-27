@@ -87,6 +87,19 @@ public sealed class AiOptions
     /// </remarks>
     public string EncryptionKey { get; set; } = string.Empty;
 
+    /// <summary>
+    /// When true, provider base URLs (and download links returned by an upstream) may resolve to
+    /// loopback or private addresses — needed for a locally hosted model such as Ollama.
+    /// </summary>
+    /// <remarks>
+    /// Off by default: with it off, the shared upstream HTTP client refuses to connect to any
+    /// loopback/private/reserved address at connect time, which is what keeps a user-supplied
+    /// base URL from becoming a probe of the server's own network. Enable only when every user
+    /// of the deployment is trusted (single-user self-hosting); a public instance must keep it
+    /// off, or anyone could make the server fetch internal endpoints.
+    /// </remarks>
+    public bool AllowPrivateNetworks { get; set; }
+
     /// <summary>Where generated images and video are written. Only paths are stored in the database.</summary>
     public string AssetRoot { get; set; } = "./storage/assets";
 

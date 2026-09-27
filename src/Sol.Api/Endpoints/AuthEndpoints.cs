@@ -18,9 +18,15 @@ public static class AuthEndpoints
 
         group.MapGet("/providers", ListProvidersAsync).WithName("AuthProviders");
         group.MapGet("/me", GetCurrentAsync).WithName("CurrentAccount");
-        group.MapGet("/login/{provider}", LoginAsync).WithName("StartExternalLogin");
-        group.MapGet("/link/{provider}", LinkAsync).WithName("LinkExternalLogin");
-        group.MapGet("/callback/{provider}", CallbackAsync).WithName("ExternalLoginCallback");
+        group.MapGet("/login/{provider}", LoginAsync)
+            .WithName("StartExternalLogin")
+            .RequireRateLimiting(RateLimitPolicies.Identity);
+        group.MapGet("/link/{provider}", LinkAsync)
+            .WithName("LinkExternalLogin")
+            .RequireRateLimiting(RateLimitPolicies.Identity);
+        group.MapGet("/callback/{provider}", CallbackAsync)
+            .WithName("ExternalLoginCallback")
+            .RequireRateLimiting(RateLimitPolicies.Identity);
         group.MapPost("/logout", LogoutAsync).WithName("Logout");
 
         return app;

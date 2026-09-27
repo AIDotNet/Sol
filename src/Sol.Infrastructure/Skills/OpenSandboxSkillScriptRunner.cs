@@ -172,7 +172,13 @@ internal sealed class OpenSandboxSkillScriptRunner(
         return (Encoding.UTF8.GetString(bytes, 0, options.RunnerMaxOutputBytes), true);
     }
 
-    private static string ShellQuote(string value) => $"'{value.Replace("'", "'\\\"'\\\"'", StringComparison.Ordinal)}'";
+    /// <summary>
+    /// Single-quotes an argument for POSIX shells. A single quote inside the value is emitted as
+    /// the standard <c>'\''</c> idiom (close quote, escaped quote, reopen) — anything else lets
+    /// argument content terminate the quoted span and inject commands.
+    /// </summary>
+    internal static string ShellQuote(string value) =>
+        $"'{value.Replace("'", "'\\''", StringComparison.Ordinal)}'";
 }
 
 internal static class SkillScriptRequestExtensions

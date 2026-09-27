@@ -36,7 +36,12 @@ COPY src/Sol.Domain/ src/Sol.Domain/
 COPY src/Sol.Application/ src/Sol.Application/
 COPY src/Sol.Infrastructure/ src/Sol.Infrastructure/
 COPY src/Sol.Api/ src/Sol.Api/
-RUN dotnet publish src/Sol.Api/Sol.Api.csproj -c Release -r "$(cat /rid)" --no-restore -o /app/publish
+# appsettings.Development.json carries dev-only key material (Ai:EncryptionKey,
+# DeviceIdentity:Pepper). Shipping it in the published image would make every deployment that
+# pulls this image share one AES key for stored provider API keys — secrets must arrive via
+# environment (docker-compose) or volume instead.
+RUN dotnet publish src/Sol.Api/Sol.Api.csproj -c Release -r "$(cat /rid)" --no-restore -o /app/publish \
+    && rm -f /app/publish/appsettings.Development.json
 
 # Native AOT output is self-contained; only shared native libs (openssl, zlib, …) are needed,
 # not the .NET runtime itself. InvariantGlobalization (Directory.Build.props) drops the ICU

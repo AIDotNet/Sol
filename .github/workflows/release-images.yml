@@ -1,0 +1,79 @@
+name: release-images
+
+# Builds and pushes the two deployable images to GHCR:
+#   ghcr.io/<owner>/sol-api   (Native AOT build, see src/Sol.Api/Dockerfile)
+#   ghcr.io/<owner>/sol-web   (Next.js standalone, see web/Dockerfile)
+# Use them locally via docker-compose.yml:
+#   SOL_API_IMAGE=ghcr.io/aidotnet/sol-api:latest \
+#   SOL_WEB_IMAGE=ghcr.io/aidotnet/sol-web:latest docker compose up
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    name: ${{ matrix.name }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: sol-api
+            context: .
+            dockerfile: src/Sol.Api/Dockerfile
+            # The AOT toolchain under QEMU is very slow and occasionally OOMs; arm64 images can
+            # be enabled by adding it here once native arm runners or caching make it viable.
+            platforms: linux/amd64
+          - name: sol-web
+            context: ./web
+            dockerfile: web/Dockerfile
+            platforms: linux/amd64,linux/arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR requires lowercase image names; AIDotNet contains uppercase.
+      - name: Lowercase the owner name
+        id: owner
+        run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.owner.outputs.value }}/${{ matrix.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

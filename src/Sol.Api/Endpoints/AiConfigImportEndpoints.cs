@@ -34,7 +34,8 @@ public static class AiConfigImportEndpoints
     {
         app.MapPost("/api/v1/ai/config/import", ImportAsync)
             .WithTags("ai")
-            .WithName("ImportAiConfig");
+            .WithName("ImportAiConfig")
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
 
         return app;
     }
@@ -273,9 +274,17 @@ public static class AiConfigImportEndpoints
             else
             {
                 var existing = plan.Existing;
-                var keyUpdate = secret is null
-                    ? ApiKeyUpdate.Unchanged
-                    : ApiKeyUpdate.Replace(secret);
+                // A share link carries data the recipient did not type. If it points a provider
+                // that already stores an API key at a different base URL and does not bring its
+                // own key, keeping the stored key would silently send it to the new host — the
+                // link's author could then read it. Dropping the key instead makes the redirect
+                // harmless: the imported provider simply needs the key re-entered.
+                var keyUpdate = secret is not null
+                    ? ApiKeyUpdate.Replace(secret)
+                    : existing.ApiKey is not null
+                      && !string.Equals(plan.BaseUrl, existing.BaseUrl, StringComparison.Ordinal)
+                        ? ApiKeyUpdate.Cleared
+                        : ApiKeyUpdate.Unchanged;
 
                 await providers.UpdateAsync(
                     existing with

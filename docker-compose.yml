@@ -4,10 +4,14 @@ services:
     container_name: sol-postgres
     environment:
       POSTGRES_USER: sol
-      POSTGRES_PASSWORD: sol_dev_password
+      # Dev default so `docker compose up` works out of the box; override POSTGRES_PASSWORD for
+      # anything that leaves this machine.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sol_dev_password}
       POSTGRES_DB: sol
+    # Loopback-only: the API reaches postgres over the compose network, so publishing the port
+    # is a dev convenience (psql from the host), never a service boundary.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     # postgres:18+ expects a single mount at /var/lib/postgresql (data lands in a
     # subdirectory) so that pg_upgrade --link works without mount-boundary issues.
     volumes:
@@ -24,8 +28,10 @@ services:
     image: redis:8-alpine
     container_name: sol-redis
     command: ["redis-server", "--appendonly", "yes"]
+    # Loopback-only and deliberately passwordless: it holds cache/presence data, and every
+    # real consumer lives on the compose network.
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - sol-redisdata:/data
     healthcheck:
@@ -38,15 +44,15 @@ services:
     image: rabbitmq:4-management-alpine
     container_name: sol-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: sol
-      RABBITMQ_DEFAULT_PASS: sol_dev_password
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-sol}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-sol_dev_password}
     ports:
-      - "5673:5672"
-      - "15673:15672"
+      - "127.0.0.1:5673:5672"
+      - "127.0.0.1:15673:15672"
     volumes:
       - sol-rabbitdata:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -56,15 +62,20 @@ services:
   opensandbox:
     image: opensandbox/server:latest
     container_name: sol-opensandbox
+    # Loopback-only on the host side: the API reaches it over the compose network. This
+    # control plane holds docker.sock, so a published port would hand anyone on the LAN a
+    # host-root code-execution endpoint gated only by a committed key.
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - sol-opensandbox-data:/root/.opensandbox
       - ./opensandbox/config.toml:/etc/opensandbox/config.toml:ro
     environment:
       SANDBOX_CONFIG_PATH: /etc/opensandbox/config.toml
-      OPENSANDBOX_SERVER_API_KEY: sol-dev-opensandbox-key
+      # Single source of truth for the sandbox key (config.toml defers to it). The default is
+      # committed for dev quickstart — override OPENSANDBOX_API_KEY on any real deployment.
+      OPENSANDBOX_SERVER_API_KEY: ${OPENSANDBOX_API_KEY:-sol-dev-opensandbox-key}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
       interval: 10s
@@ -75,7 +86,9 @@ services:
   # Native AOT build of Sol.Api (see src/Sol.Api/Dockerfile for the SDK/toolchain notes).
   # Containerized so it can reach the OpenSandbox control plane over the Compose network.
   api:
-    image: hejiale010426/sol-api:latest
+    # Override to run a CI-built image instead of building locally, e.g.
+    #   SOL_API_IMAGE=ghcr.io/aidotnet/sol-api:latest docker compose up
+    image: ${SOL_API_IMAGE:-hejiale010426/sol-api:latest}
     build:
       context: .
       dockerfile: src/Sol.Api/Dockerfile
@@ -88,30 +101,35 @@ services:
       rabbitmq:
         condition: service_healthy
     ports:
-      - "5298:8080"
+      # Loopback-only: the web container proxies /api/* to api:8080 over the compose network,
+      # so direct API access is a host-side dev convenience.
+      - "127.0.0.1:5298:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
-      Postgres__ConnectionString: "Host=postgres;Port=5432;Database=sol;Username=sol;Password=sol_dev_password"
+      Postgres__ConnectionString: "Host=postgres;Port=5432;Database=sol;Username=sol;Password=${POSTGRES_PASSWORD:-sol_dev_password}"
       Postgres__RunMigrationsOnStartup: "true"
       Redis__Configuration: "redis:6379"
       Redis__InstanceName: "sol:"
       RabbitMq__HostName: rabbitmq
       RabbitMq__Port: "5672"
-      RabbitMq__UserName: sol
-      RabbitMq__Password: sol_dev_password
+      RabbitMq__UserName: ${RABBITMQ_USER:-sol}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD:-sol_dev_password}
       Realtime__Backplane: "None"
       Authentication__PublicOrigin: "${PUBLIC_ORIGIN:-http://localhost:3000}"
       Authentication__GitHub__Enabled: "${GITHUB_OAUTH_ENABLED:-false}"
       Authentication__GitHub__ClientId: "${GITHUB_OAUTH_CLIENT_ID:-}"
       Authentication__GitHub__ClientSecret: "${GITHUB_OAUTH_CLIENT_SECRET:-}"
       Authentication__GitHub__Scope: "read:user user:email"
-      # Same dev-only placeholders as appsettings.Development.json — never reuse in production.
-      DeviceIdentity__Pepper: "dev-only-pepper-do-not-use-in-production"
-      Ai__EncryptionKey: "c29sLWRldi1rZXktbm90LWZvci1wcm9kdWN0aW9uISE="
+      # Dev-only placeholders, overridable — never reuse in production. The image does not ship
+      # appsettings.Development.json, so these env vars are the only key material the container
+      # sees, and Ai__AllowPrivateNetworks stays at the safe default (false): loopback/private
+      # upstreams are a local `dotnet run` convenience, not something containers should allow.
+      DeviceIdentity__Pepper: "${SOL_PEPPER:-dev-only-pepper-do-not-use-in-production}"
+      Ai__EncryptionKey: "${SOL_AI_ENCRYPTION_KEY:-c29sLWRldi1rZXktbm90LWZvci1wcm9kdWN0aW9uISE=}"
       Skills__SandboxEnabled: "true"
       Skills__OpenSandboxDomain: "opensandbox:8090"
-      Skills__OpenSandboxApiKey: "sol-dev-opensandbox-key"
+      Skills__OpenSandboxApiKey: "${OPENSANDBOX_API_KEY:-sol-dev-opensandbox-key}"
       Skills__OpenSandboxImage: "opensandbox/code-interpreter:v1.1.0"
     restart: unless-stopped
 

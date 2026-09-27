@@ -314,13 +314,23 @@ export function resolveQuickConfig(
   config: QuickConfig | QuickConfigInput,
   existingProviders: readonly AiProvider[] = [],
 ): ResolvedQuickConfig {
+  // A link that redirects a provider which already stores an API key to a different base URL
+  // must not apply silently: the API drops the stored key in that case (it would otherwise be
+  // sent to the new host), so the user has to confirm and re-enter it either way.
+  let redirectsStoredKey = false;
   const providers = config.providers.map((provider) => {
     const preset = findPreset(provider.builtinId);
     const existing = findExistingProvider(provider, existingProviders);
     const type = provider.type ?? existing?.type ?? preset?.type ?? "openai-chat";
     const name = provider.name ?? existing?.name ?? preset?.name ?? provider.builtinId ?? "";
     const baseUrl = provider.baseUrl ?? existing?.baseUrl ?? preset?.defaultBaseUrl ?? null;
+    const normalizedBaseUrl = baseUrl ? normalizeBaseUrl(baseUrl, type) : null;
     const models = provider.models ?? (preset ? presetModels(preset) : []);
+
+    if (!provider.apiKey && existing?.hasApiKey
+      && normalizedBaseUrl !== null && normalizedBaseUrl !== existing.baseUrl) {
+      redirectsStoredKey = true;
+    }
 
     return {
       builtinId: provider.builtinId ?? existing?.builtinId ?? null,
@@ -330,7 +340,7 @@ export function resolveQuickConfig(
       presetVersion: provider.presetVersion ?? preset?.version ?? existing?.presetVersion ?? null,
       type,
       apiKey: provider.apiKey ?? null,
-      baseUrl: baseUrl ? normalizeBaseUrl(baseUrl, type) : null,
+      baseUrl: normalizedBaseUrl,
       models: models.map((model) => {
         const modelKey = "id" in model ? model.id : model.modelKey;
 
@@ -353,7 +363,8 @@ export function resolveQuickConfig(
 
   return {
     autoApply: config.autoApply ?? false,
-    requiresConfirmation: providers.some((provider) => provider.apiKey !== null),
+    requiresConfirmation:
+      providers.some((provider) => provider.apiKey !== null) || redirectsStoredKey,
     providers,
   };
 }

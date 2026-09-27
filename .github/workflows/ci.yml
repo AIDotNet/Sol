@@ -1,0 +1,166 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (build + unit tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # global.json pins the exact preview SDK (rollForward: disable), so CI builds with the
+      # same toolchain that produced the committed obj/ artifacts and the AOT image.
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Building the solution (not just the test project) also compiles Sol.Api, which the test
+      # project does not reference.
+      - name: Build (Release)
+        run: dotnet build Sol.slnx -c Release --nologo
+
+      - name: Unit tests
+        run: dotnet test tests/Sol.UnitTests/Sol.UnitTests.csproj -c Release --nologo
+
+  web:
+    name: web (lint + vitest + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      # bun.lock is the dependency source of truth (web/Dockerfile installs with bun too).
+      # package-lock.json is stale — do not use `npm ci` here.
+      - uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Tests and builds run on Node for parity with vitest/next expectations; node_modules
+      # produced by bun is consumed as-is (no npm install step).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  e2e:
+    name: e2e (playwright, cross-service)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: sol
+          POSTGRES_PASSWORD: sol_dev_password
+          POSTGRES_DB: sol
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sol -d sol"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:4-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: sol
+          RABBITMQ_DEFAULT_PASS: sol_dev_password
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: oven-sh/setup-bun@v2
+      - name: Install web dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Playwright browsers
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      # The specs are cross-service smoke tests: playwright's webServer starts `next dev`, and
+      # the app expects the .NET API on :5298 (see web/playwright.config.ts).
+      - name: Start the API
+        run: |
+          dotnet run --project src/Sol.Api/Sol.Api.csproj --no-launch-profile > api.log 2>&1 &
+          echo $! > api.pid
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:5298
+          Postgres__ConnectionString: "Host=localhost;Port=5432;Database=sol;Username=sol;Password=sol_dev_password"
+          Postgres__RunMigrationsOnStartup: "true"
+          Redis__Configuration: "localhost:6379"
+          RabbitMq__HostName: "localhost"
+          RabbitMq__Port: "5672"
+          RabbitMq__UserName: "sol"
+          RabbitMq__Password: "sol_dev_password"
+
+      - name: Wait for the API
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:5298/health/live >/dev/null 2>&1; then
+              echo "API is up"; exit 0
+            fi
+            sleep 3
+          done
+          echo "API did not become healthy in time — last 100 log lines:"
+          tail -n 100 api.log
+          exit 1
+
+      - name: Playwright tests
+        working-directory: web
+        run: npm run test:e2e
+        env:
+          CI: "true"
+
+      - name: Stop the API
+        if: always()
+        run: |
+          [ -f api.pid ] && kill "$(cat api.pid)" 2>/dev/null || true

@@ -21,11 +21,19 @@ public static class McpEndpoints
         var group = app.MapGroup("/api/v1/mcp").WithTags("mcp");
 
         group.MapGet("/servers", ListAsync).WithName("ListMcpServers");
-        group.MapPost("/servers", CreateAsync).WithName("CreateMcpServer");
-        group.MapPost("/servers/import", ImportAsync).WithName("ImportMcpServers");
-        group.MapPatch("/servers/{id}", UpdateAsync).WithName("UpdateMcpServer");
+        group.MapPost("/servers", CreateAsync)
+            .WithName("CreateMcpServer")
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
+        group.MapPost("/servers/import", ImportAsync)
+            .WithName("ImportMcpServers")
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
+        group.MapPatch("/servers/{id}", UpdateAsync)
+            .WithName("UpdateMcpServer")
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
         group.MapDelete("/servers/{id}", DeleteAsync).WithName("DeleteMcpServer");
-        group.MapPost("/servers/{id}/check", CheckAsync).WithName("CheckMcpServer");
+        group.MapPost("/servers/{id}/check", CheckAsync)
+            .WithName("CheckMcpServer")
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
         group.MapGet("/servers/{id}/tools", ListToolsAsync).WithName("ListMcpServerTools");
 
         return app;

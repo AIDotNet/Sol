@@ -75,6 +75,35 @@ public sealed class SkillScriptRunnerTests
             runner.RunAsync(request, CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData("", "''")]
+    [InlineData("plain-arg", "'plain-arg'")]
+    [InlineData("a b --flag=1", "'a b --flag=1'")]
+    // The embedded quote must use the '\'' idiom; any other replacement lets argument content
+    // close the quoted span and append commands (see the injection case below).
+    [InlineData("it's", "'it'\\''s'")]
+    [InlineData("a'b'c", "'a'\\''b'\\''c'")]
+    public void Arguments_are_single_quoted_with_the_posix_escape_idiom(string input, string expected)
+    {
+        Assert.Equal(expected, OpenSandboxSkillScriptRunner.ShellQuote(input));
+    }
+
+    [Fact]
+    public void An_injection_attempt_stays_a_single_argument()
+    {
+        // The whole payload — including the would-be command separators — must remain inside
+        // the quoted span. Quoted form: ''\''; touch /tmp/pwned; #' — the embedded '\'' closes,
+        // escapes, and reopens the span, so sh receives exactly one argument and never executes
+        // the trailing text.
+        var quoted = OpenSandboxSkillScriptRunner.ShellQuote("'; touch /tmp/pwned; #");
+
+        Assert.Equal("''\\''; touch /tmp/pwned; #'", quoted);
+        // After removing escaped quotes (\' — a literal quote, not a delimiter), every
+        // remaining single quote is a span delimiter and must therefore pair up.
+        var delimiters = quoted.Replace("\\'", string.Empty);
+        Assert.Equal(0, delimiters.Count(c => c == '\'') % 2);
+    }
+
     private static OpenSandboxSkillScriptRunner Runner() => new(
         Microsoft.Extensions.Options.Options.Create(new SkillsOptions
         {

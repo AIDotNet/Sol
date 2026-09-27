@@ -65,7 +65,7 @@ public sealed class ResolveDeviceIdentity(
         if (DeviceId.TryParse(payload.ClientStoredId, out var storedId))
         {
             var restored = await devices.FindByIdAsync(storedId, ct);
-            if (restored is not null)
+            if (restored is not null && MatchesStoredDevice(restored, payload, remoteAddress))
             {
                 await devices.TouchAsync(storedId, now, ct);
                 var visitorId = await visitors.FindVisitorForDeviceAsync(storedId, ct)
@@ -101,6 +101,35 @@ public sealed class ResolveDeviceIdentity(
 
         return new IdentityResolution(
             newDeviceId, visitor, IsNewDevice: true, LinkConfidence.For(method), method);
+    }
+
+    /// <summary>
+    /// Gates restoration of a localStorage-mirrored device id on the request still looking like
+    /// the machine that earned the id.
+    /// </summary>
+    /// <remarks>
+    /// The mirrored id reaches JavaScript by design, so on its own it is a bearer credential —
+    /// anyone it leaks to could otherwise answer a handshake with it and take over the device's
+    /// canvases, agent history, and stored provider keys. The raw signals behind a stored
+    /// fingerprint never leave the server, so a remote holder of the bare id cannot reproduce
+    /// them: requiring an exact match (same browser anywhere) or a coarse match (same stable
+    /// signals on the same IP prefix) keeps the legitimate cookie-cleared-same-machine restore
+    /// working while turning a leaked id alone into a fresh device.
+    /// </remarks>
+    private bool MatchesStoredDevice(
+        Device device,
+        DeviceSignalsPayload payload,
+        IPAddress? remoteAddress)
+    {
+        var exact = hasher.ComputeExact(payload.Stable, payload.Volatile, device.SignalVersion);
+        if (device.FingerprintExact.AsSpan().SequenceEqual(exact))
+        {
+            return true;
+        }
+
+        var coarse = hasher.ComputeCoarse(
+            payload.Stable, ipPrefixes.Extract(remoteAddress), device.SignalVersion);
+        return device.FingerprintCoarse.AsSpan().SequenceEqual(coarse);
     }
 
     /// <summary>

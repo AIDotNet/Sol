@@ -20,8 +20,14 @@ public static class SkillEndpoints
         var group = app.MapGroup("/api/v1/skills").WithTags("skills");
         group.MapGet("/", ListAsync).WithName("ListSkills");
         group.MapGet("/{id}", GetAsync).WithName("GetSkill");
-        group.MapPost("/scan", ScanAsync).WithName("ScanSkill").DisableAntiforgery();
-        group.MapPost("/", InstallAsync).WithName("InstallSkill").DisableAntiforgery();
+        group.MapPost("/scan", ScanAsync)
+            .WithName("ScanSkill")
+            .DisableAntiforgery()
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
+        group.MapPost("/", InstallAsync)
+            .WithName("InstallSkill")
+            .DisableAntiforgery()
+            .RequireRateLimiting(RateLimitPolicies.ConfigWrite);
         group.MapDelete("/{id}", DeleteAsync).WithName("DeleteSkill");
         return app;
     }

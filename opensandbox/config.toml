@@ -1,7 +1,8 @@
 [server]
 host = "0.0.0.0"
 port = 8090
-api_key = "sol-dev-opensandbox-key"
+# No api_key here on purpose: the OPENSANDBOX_SERVER_API_KEY env var (see docker-compose.yml)
+# is the single source of truth, so a committed value can never end up as the real secret.
 max_sandbox_timeout_seconds = 120
 
 [runtime]

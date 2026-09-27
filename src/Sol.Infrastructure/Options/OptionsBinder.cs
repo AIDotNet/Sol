@@ -139,6 +139,7 @@ internal static class OptionsBinder
         return new AiOptions
         {
             EncryptionKey = section["EncryptionKey"] ?? string.Empty,
+            AllowPrivateNetworks = ReadBool(section["AllowPrivateNetworks"], false),
             AssetRoot = section["AssetRoot"] ?? "./storage/assets",
             RequestTimeoutSeconds = Math.Max(
                 AiOptions.MinimumRequestTimeoutSeconds,

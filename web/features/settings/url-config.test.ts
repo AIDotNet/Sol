@@ -196,6 +196,39 @@ describe("toImportPayload", () => {
     expect(result.requiresConfirmation).toBe(false);
   });
 
+  it("requires confirmation when a keyless link redirects a keyed provider", () => {
+    const existing = {
+      id: "provider-1",
+      builtinId: "openai",
+      name: "OpenAI",
+      type: "openai-chat",
+      baseUrl: "https://api.openai.com/v1",
+      enabled: true,
+      hasApiKey: true,
+      models: [],
+      sortOrder: 0,
+      createdAt: "",
+      updatedAt: "",
+    };
+
+    // Same base URL: nothing sensitive changes, no confirmation needed.
+    expect(
+      resolveQuickConfig(
+        { providers: [{ builtinId: "openai", baseUrl: "https://api.openai.com/v1" }] },
+        [existing],
+      ).requiresConfirmation,
+    ).toBe(false);
+
+    // A different host with no key in the link would make the API drop the stored key (and,
+    // before that server-side guard, ship it to the new host) — never apply silently.
+    expect(
+      resolveQuickConfig(
+        { autoApply: true, providers: [{ builtinId: "openai", baseUrl: "https://evil.example/v1" }] },
+        [existing],
+      ).requiresConfirmation,
+    ).toBe(true);
+  });
+
   it("preserves an existing built-in proxy when a minimal link only supplies a key", () => {
     const result = resolveQuickConfig(
       { providers: [{ builtinId: "openai", apiKey: "sk-new" }] },

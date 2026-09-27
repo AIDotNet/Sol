@@ -229,15 +229,24 @@ internal sealed class VideoJobPoller(
     {
         try
         {
+            // The URL comes from the upstream's own response body, so it is treated as untrusted
+            // input here: scheme-checked, and host-checked again at connect time by the shared
+            // upstream client's guard.
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var target)
+                || (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps))
+            {
+                logger.LogWarning("Video download URL was not absolute http(s) and was skipped.");
+                return null;
+            }
+
             var client = httpClientFactory.CreateClient("upstream");
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var request = new HttpRequestMessage(HttpMethod.Get, target);
 
             // Some vendors return a pre-signed URL that rejects an Authorization header, others
             // return an API route that requires it. Sending it only for same-host URLs keeps
             // both working, and avoids leaking the key to a CDN.
-            if (Uri.TryCreate(url, UriKind.Absolute, out var parsed)
-                && parsed.Host.Contains("api.", StringComparison.OrdinalIgnoreCase))
+            if (target.Host.Contains("api.", StringComparison.OrdinalIgnoreCase))
             {
                 request.Headers.Authorization =
                     new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
