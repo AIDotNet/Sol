@@ -39,6 +39,12 @@ jobs:
             context: ./web
             dockerfile: web/Dockerfile
             platforms: linux/amd64,linux/arm64
+            # Rewrites are resolved into routes-manifest.json at BUILD time (see web/Dockerfile):
+            # a runtime SOL_API_ORIGIN cannot change them. Bake the canonical in-compose address
+            # so the published image proxies correctly out of the box.
+            build_args: |
+              SOL_API_ORIGIN=http://api:8080
+              API_BASE_URL=http://api:8080
 
     steps:
       - uses: actions/checkout@v4
@@ -75,5 +81,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build_args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
