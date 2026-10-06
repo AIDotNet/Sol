@@ -5,7 +5,9 @@ RUN bun install --frozen-lockfile
 
 FROM oven/bun:1 AS build
 WORKDIR /app
-ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
+# Canonical site identity baked into the image (metadataBase/robots/sitemap). release-images.yml
+# passes no build args, so this ARG default is what the published GHCR image ships with.
+ARG NEXT_PUBLIC_SITE_URL=https://sol.routin.ai/
 ARG API_BASE_URL=http://localhost:5298
 # next.config.ts resolves this into routes-manifest.json at build time, so it must be a
 # build arg — setting it only in the runtime environment is too late for rewrites.

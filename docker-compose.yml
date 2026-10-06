@@ -134,11 +134,11 @@ services:
     restart: unless-stopped
 
   web:
-    image: hejiale010426/sol-web:latest
+    image: ghcr.io/aidotnet/sol-web:latest
     build:
       context: ./web
       args:
-        NEXT_PUBLIC_SITE_URL: ${PUBLIC_ORIGIN:-http://localhost:3000}
+        NEXT_PUBLIC_SITE_URL: https://sol.routin.ai/
         API_BASE_URL: http://api:8080
         SOL_API_ORIGIN: http://api:8080
     container_name: sol-web

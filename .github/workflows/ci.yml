@@ -64,6 +64,11 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
+          # lib/env.ts zod-parses both at import time (layout/robots/sitemap), and .env.local is
+          # gitignored — without these the build fails collecting page data. NEXT_PUBLIC_SITE_URL
+          # matches the Dockerfile/published-image default; the API URL is CI-local.
+          API_BASE_URL: http://localhost:5298
+          NEXT_PUBLIC_SITE_URL: https://sol.routin.ai/
 
   e2e:
     name: e2e (playwright, cross-service)
@@ -159,6 +164,12 @@ jobs:
         run: npm run test:e2e
         env:
           CI: "true"
+          # The webServer spawns `next dev`, which inherits this step's env. Without it
+          # lib/env.ts throws on import and every route 500s — same requirement as the web job.
+          # NEXT_PUBLIC_SITE_URL only feeds metadata here; navigation stays on baseURL
+          # (localhost:3000), so the production default is safe to bake in.
+          API_BASE_URL: http://localhost:5298
+          NEXT_PUBLIC_SITE_URL: https://sol.routin.ai/
 
       - name: Stop the API
         if: always()
