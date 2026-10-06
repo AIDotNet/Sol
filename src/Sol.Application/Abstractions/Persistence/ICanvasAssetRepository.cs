@@ -26,6 +26,16 @@ public interface ICanvasAssetRepository
     Task<CanvasAsset?> FindAsync(DeviceId deviceId, Guid assetId, CancellationToken ct);
 
     /// <summary>
+    /// Loads asset metadata without a device scope.
+    /// </summary>
+    /// <remarks>
+    /// Only for requests already authorized by something stronger than device ownership — the
+    /// signed, expiring token on a public asset link. Callers must never expose this lookup on
+    /// an endpoint that takes just an id.
+    /// </remarks>
+    Task<CanvasAsset?> FindByIdAsync(Guid assetId, CancellationToken ct);
+
+    /// <summary>
     /// Lists a device's assets, newest first.
     /// </summary>
     /// <remarks>

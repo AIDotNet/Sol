@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Sol.Application.Features.Agent;
 using Sol.Application.Features.Identity;
 
 namespace Sol.Infrastructure.Options;
@@ -136,14 +137,35 @@ internal static class OptionsBinder
     public static AiOptions BindAi(IConfiguration configuration)
     {
         var section = configuration.GetSection(AiOptions.SectionName);
+        var publicOrigin = section["PublicOrigin"];
+
+        // Default to the site origin: the deployments that need public asset links proxy /api
+        // behind it, and they all already configure it for OAuth — one less key to set.
+        if (string.IsNullOrWhiteSpace(publicOrigin))
+        {
+            publicOrigin = configuration["Authentication:PublicOrigin"];
+        }
+
         return new AiOptions
         {
             EncryptionKey = section["EncryptionKey"] ?? string.Empty,
+            PublicOrigin = publicOrigin?.TrimEnd('/') ?? string.Empty,
             AllowPrivateNetworks = ReadBool(section["AllowPrivateNetworks"], false),
             AssetRoot = section["AssetRoot"] ?? "./storage/assets",
             RequestTimeoutSeconds = Math.Max(
                 AiOptions.MinimumRequestTimeoutSeconds,
                 ReadInt(section["RequestTimeoutSeconds"], 1200)),
+        };
+    }
+
+    public static AgentOptions BindAgent(IConfiguration configuration)
+    {
+        var section = configuration.GetSection(AgentOptions.SectionName);
+        return new AgentOptions
+        {
+            // Clamped: a low floor keeps a misconfigured zero from turning every run into an
+            // instant limit summary, and the ceiling bounds how long one run can burn tokens.
+            MaxToolIterations = Math.Clamp(ReadInt(section["MaxToolIterations"], 40), 4, 200),
         };
     }
 

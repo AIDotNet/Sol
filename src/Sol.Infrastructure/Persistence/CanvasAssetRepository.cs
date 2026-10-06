@@ -49,6 +49,22 @@ public sealed class CanvasAssetRepository(SolConnectionFactory connections) : IC
         return row?.ToDomain();
     }
 
+    public async Task<CanvasAsset?> FindByIdAsync(Guid assetId, CancellationToken ct)
+    {
+        await using var connection = await connections.OpenAsync(ct);
+
+        var row = await connection.QueryFirstOrDefaultAsync<AssetRow>(
+            """
+            SELECT asset_id, device_id, kind, media_type, storage_path, byte_size, prompt,
+                   created_at, group_id
+            FROM canvas_asset
+            WHERE asset_id = @AssetId
+            """,
+            new AssetIdParams { AssetId = assetId });
+
+        return row?.ToDomain();
+    }
+
     public async Task<IReadOnlyList<CanvasAsset>> ListAsync(
         DeviceId deviceId,
         string? kind,
@@ -281,6 +297,12 @@ internal sealed class AssetScopeParams
 {
     public Guid AssetId { get; init; }
     public Guid DeviceId { get; init; }
+}
+
+/// <summary>Device-less lookup — only ever reached through the signed-token path.</summary>
+internal sealed class AssetIdParams
+{
+    public Guid AssetId { get; init; }
 }
 
 internal sealed class AssetRow

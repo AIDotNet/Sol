@@ -471,6 +471,38 @@ export const en: Dictionary = {
     seconds: "{n}s",
   },
 
+  story: {
+    title: "Novel to storyboard video",
+    description: "Paste a story and the Agent extracts characters, splits shots, and lays the whole workflow out on the canvas — then fine-tune any shot.",
+    storyLabel: "Story text",
+    storyPlaceholder: "Paste the novel text or a plot outline…",
+    shotCount: "Shot count",
+    duration: "Seconds per shot",
+    imageModel: "Image model",
+    videoModel: "Video model",
+    agentModel: "Agent model",
+    styleLabel: "Visual style",
+    styleNone: "None",
+    style: {
+      cinematic: "Cinematic",
+      anime: "Anime",
+      guofeng: "Guofeng",
+      realistic: "Realistic",
+      storybook: "Storybook",
+    },
+    generateVideos: "Generate shot videos",
+    generateVideosHint: "Off: only character portraits and storyboard frames — videos can be run per shot later",
+    costEstimate: "Will generate ≈{images} images and {videos} videos",
+    runActive: "An Agent run is active — start after it finishes",
+    start: "Start",
+    error: {
+      "story-required": "Paste the story text first",
+      "story-too-long": "The story is too long — split it and run in batches",
+      "image-model-required": "Configure and pick an image model first",
+      "video-model-required": "Configure and pick a video model to generate videos",
+    },
+  },
+
   errors: {
     networkError: "Network request failed",
     unauthorized: "Device identity not recognised — reload the page",

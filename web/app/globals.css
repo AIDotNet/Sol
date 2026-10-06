@@ -232,6 +232,91 @@
   }
 }
 
+/* Connection burst. Comets and the edge flash animate stroke properties, not just
+   opacity/transform — acceptable because each plays once, for under a second, on one node. */
+@keyframes canvas-connect-comet {
+  from {
+    stroke-dashoffset: 0.09;
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  to {
+    stroke-dashoffset: -0.41;
+    opacity: 0;
+  }
+}
+
+/* Same travel as the comet, offset so this short bright dash rides at its leading end. */
+@keyframes canvas-connect-comet-head {
+  from {
+    stroke-dashoffset: 0.03;
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  to {
+    stroke-dashoffset: -0.47;
+    opacity: 0;
+  }
+}
+
+@keyframes canvas-connect-ring {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(3.4);
+  }
+}
+
+@keyframes canvas-connect-port {
+  0% {
+    opacity: 1;
+    transform: scale(0.6);
+  }
+  18% {
+    transform: scale(1.3);
+  }
+  35% {
+    transform: none;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+@keyframes canvas-connect-bloom {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+/* No 100% keyframe: the stroke eases back to whatever the edge normally draws with. */
+@keyframes canvas-edge-flash {
+  0%,
+  50% {
+    stroke: var(--burst);
+    stroke-width: 2.5;
+  }
+}
+
 @keyframes agent-message-in {
   from {
     opacity: 0;
@@ -362,6 +447,75 @@
     animation: canvas-sweep 1.6s ease-in-out infinite;
   }
 
+  /* Pieces of `ConnectBurst`; `--burst` is the connection colour, set inline. */
+  .canvas-connect-comet,
+  .canvas-connect-comet-head {
+    fill: none;
+    stroke: var(--burst);
+    stroke-linecap: round;
+  }
+
+  .canvas-connect-comet {
+    stroke-width: 2;
+    stroke-dasharray: 0.09 2;
+    animation: canvas-connect-comet 850ms cubic-bezier(0.3, 0.6, 0.4, 1) both;
+  }
+
+  .canvas-connect-comet-glow {
+    stroke-width: 9;
+    stroke-opacity: 0.3;
+  }
+
+  .canvas-connect-comet-head {
+    stroke: #fff;
+    stroke-width: 1.5;
+    stroke-dasharray: 0.03 2;
+    animation: canvas-connect-comet-head 850ms cubic-bezier(0.3, 0.6, 0.4, 1) both;
+  }
+
+  /* Rings, port flash, and bloom are all centred on the input handle: left edge, mid-height. */
+  .canvas-connect-ring,
+  .canvas-connect-port {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    margin: -6px 0 0 -6px;
+    border-radius: 9999px;
+  }
+
+  .canvas-connect-ring {
+    border: 1.5px solid var(--burst);
+    animation: canvas-connect-ring 560ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  .canvas-connect-port {
+    background: var(--burst);
+    box-shadow: 0 0 10px var(--burst);
+    animation: canvas-connect-port 900ms ease-out both;
+  }
+
+  .canvas-connect-bloom {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 180px;
+    height: 180px;
+    margin: -90px 0 0 -90px;
+    border-radius: 9999px;
+    background: radial-gradient(
+      circle,
+      color-mix(in oklab, var(--burst) 40%, transparent) 0%,
+      transparent 65%
+    );
+    animation: canvas-connect-bloom 700ms ease-out both;
+  }
+
+  .canvas-edge-flash .react-flow__edge-path {
+    animation: canvas-edge-flash 1s ease-out both;
+  }
+
   .agent-message-enter {
     animation: agent-message-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
@@ -390,8 +544,14 @@
   .canvas-fade-in,
   .canvas-node,
   .canvas-node-busy::after,
-  .canvas-sweep::after {
+  .canvas-sweep::after,
+  .canvas-edge-flash .react-flow__edge-path {
     animation: none;
+  }
+
+  /* Purely decorative, and without its animation it would sit frozen until the pulse expires. */
+  .canvas-connect-burst {
+    display: none;
   }
 
   .agent-message-enter,

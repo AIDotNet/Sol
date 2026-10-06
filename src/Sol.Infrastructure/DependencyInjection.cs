@@ -49,6 +49,8 @@ public static class DependencyInjection
             Microsoft.Extensions.Options.Options.Create(OptionsBinder.BindDeviceIdentity(configuration)));
         services.AddSingleton<IOptions<AuthenticationOptions>>(
             Microsoft.Extensions.Options.Options.Create(OptionsBinder.BindAuthentication(configuration)));
+        services.AddSingleton<IOptions<AgentOptions>>(
+            Microsoft.Extensions.Options.Options.Create(OptionsBinder.BindAgent(configuration)));
 
         var skillsOptions = OptionsBinder.BindSkills(configuration);
         services.AddSingleton<IOptions<SkillsOptions>>(
@@ -116,6 +118,8 @@ public static class DependencyInjection
         // Constructed eagerly so a missing or malformed encryption key fails at startup rather
         // than on the first request that tries to save a key.
         services.AddSingleton<IApiKeyProtector>(new AesGcmApiKeyProtector(options));
+        services.AddSingleton<IAssetLinkSigner>(sp =>
+            new AssetLinkSigner(options, sp.GetRequiredService<IClock>()));
 
         // A named client, not a typed one: typed clients bind through reflection, which is a
         // trimming hazard under AOT.

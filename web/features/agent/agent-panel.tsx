@@ -44,7 +44,8 @@ import {
 } from "@/features/agent/types";
 import { useCanvasStore, type CanvasNode } from "@/features/canvas/store";
 
-const AGENT_PROTOCOLS = new Set(["anthropic", "openai-chat", "openai-responses"]);
+/** Chat protocols the Agent runtime can drive. Shared with the story dialog's model picker. */
+export const AGENT_PROTOCOLS = new Set(["anthropic", "openai-chat", "openai-responses"]);
 const MAX_AGENT_IMAGES = 8;
 const IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);

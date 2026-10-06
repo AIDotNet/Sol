@@ -88,7 +88,7 @@ services:
   api:
     # Override to run a CI-built image instead of building locally, e.g.
     #   SOL_API_IMAGE=ghcr.io/aidotnet/sol-api:latest docker compose up
-    image: ${SOL_API_IMAGE:-hejiale010426/sol-api:latest}
+    image: hejiale010426/sol-api
     build:
       context: .
       dockerfile: src/Sol.Api/Dockerfile

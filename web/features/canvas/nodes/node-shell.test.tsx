@@ -5,6 +5,7 @@ import type { NodeExecution } from "@/features/canvas/types";
 vi.mock("@xyflow/react", () => ({
   Handle: () => null,
   Position: { Left: "left", Right: "right" },
+  useNodeId: () => null,
 }));
 
 vi.mock("@/components/providers/i18n-provider", () => ({

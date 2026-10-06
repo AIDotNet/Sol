@@ -15,6 +15,7 @@ import {
   BookOpen,
   Bot,
   Check,
+  Clapperboard,
   CloudAlert,
   Copy,
   Download,
@@ -42,6 +43,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -52,6 +54,7 @@ import { AgentPanel } from "@/features/agent/agent-panel";
 import { AgentRuntime } from "@/features/agent/agent-runtime";
 import { registerAgentCanvasControls } from "@/features/agent/canvas-control";
 import { useAgentStore } from "@/features/agent/store";
+import { StoryDialog } from "@/features/agent/story-dialog";
 import { useAiStore } from "@/features/ai/store";
 import {
   centredAt,
@@ -60,6 +63,11 @@ import {
   usePasteImages,
 } from "@/features/canvas/canvas-interactions";
 import { resumeVideoJobs } from "@/features/canvas/execution";
+import {
+  connectColor,
+  LightningConnectionLine,
+  useConnectPulseStore,
+} from "@/features/canvas/connection-effects";
 import { ImageGenNode } from "@/features/canvas/nodes/image-gen-node";
 import { AssetLibraryDialog } from "@/features/canvas/asset-library-dialog";
 import { PromptLibraryDialog } from "@/features/canvas/prompt-library-dialog";
@@ -125,6 +133,10 @@ const PRO_OPTIONS = { hideAttribution: true };
 // to 3x and fill the screen with a single text box.
 const FIT_VIEW_OPTIONS = { maxZoom: 1, padding: 0.2 };
 const DELETE_KEY_CODES = ["Backspace", "Delete"];
+// How close (flow units) a drag must come to a handle before it snaps on. The lightning arc lives
+// in that gap, so React Flow's default of 20 would hide it under the cursor; this lets it strike
+// from about a node-row away, as in the reference.
+const CONNECTION_RADIUS = 90;
 const FIRST_VISIT_TEMPLATE = CANVAS_TEMPLATES.find((template) => template.id === "text-to-image")!;
 
 function newCanvasGraphId(): string {
@@ -266,6 +278,8 @@ function CanvasInner({
   const undo = useCanvasStore((state) => state.undo);
   const redo = useCanvasStore((state) => state.redo);
   const load = useCanvasStore((state) => state.load);
+  const pulses = useConnectPulseStore((state) => state.pulses);
+  const firePulse = useConnectPulseStore((state) => state.fire);
 
   const loadAi = useAiStore((state) => state.load);
   const agentOpen = useAgentStore((state) => state.open);
@@ -275,6 +289,7 @@ function CanvasInner({
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [storyOpen, setStoryOpen] = useState(false);
   const [background, setBackground] = useState<BackgroundVariant | "none">(BackgroundVariant.Dots);
   const [menu, setMenu] = useState<{
     x: number;
@@ -564,6 +579,31 @@ function CanvasInner({
   );
 
   /**
+   * Adds the edge, then plays the connection burst on its target.
+   *
+   * The burst is skipped for a connection that already exists — `addEdge` ignores duplicates, and
+   * celebrating an edge that did not change would be misleading.
+   */
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      const duplicate = getEdges().some(
+        (edge) =>
+          edge.source === connection.source &&
+          edge.target === connection.target &&
+          (edge.sourceHandle ?? null) === (connection.sourceHandle ?? null) &&
+          (edge.targetHandle ?? null) === (connection.targetHandle ?? null),
+      );
+
+      onConnect(connection);
+      if (duplicate) return;
+
+      const source = getNodes().find((node) => node.id === connection.source);
+      firePulse(connection.source, connection.target, connectColor(source?.type));
+    },
+    [firePulse, getEdges, getNodes, onConnect],
+  );
+
+  /**
    * Marks the wrapper while a gesture is in flight, so CSS can stand down the expensive effects.
    *
    * Written straight to the DOM rather than held in state: a re-render of this component is
@@ -678,10 +718,26 @@ function CanvasInner({
     .join(",");
 
   const flowEdges = useMemo(() => {
-    if (!busyKey) return edges;
-    const busy = new Set(busyKey.split(","));
-    return edges.map((edge) => (busy.has(edge.target) ? { ...edge, animated: true } : edge));
-  }, [edges, busyKey]);
+    const flashing = Object.values(pulses);
+    if (!busyKey && flashing.length === 0) return edges;
+    const busy = new Set(busyKey ? busyKey.split(",") : []);
+    return edges.map((edge) => {
+      let next = busy.has(edge.target) ? { ...edge, animated: true } : edge;
+
+      // The edge that just landed briefly takes the colour of the burst on its target.
+      const pulse = flashing.find(
+        (candidate) => candidate.source === edge.source && candidate.target === edge.target,
+      );
+      if (pulse) {
+        next = {
+          ...next,
+          className: cn(next.className, "canvas-edge-flash"),
+          style: { ...next.style, "--burst": pulse.color } as CSSProperties,
+        };
+      }
+      return next;
+    });
+  }, [edges, busyKey, pulses]);
 
   return (
     <div ref={wrapperRef} className="relative size-full">
@@ -695,8 +751,10 @@ function CanvasInner({
         colorMode={resolvedTheme === "dark" ? "dark" : resolvedTheme === "light" ? "light" : "system"}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onConnect={handleConnect}
         isValidConnection={isValidConnection}
+        connectionLineComponent={LightningConnectionLine}
+        connectionRadius={CONNECTION_RADIUS}
         onMoveStart={onMoveStart}
         onMoveEnd={onMoveEnd}
         onNodeDragStart={onNodeDragStart}
@@ -776,6 +834,11 @@ function CanvasInner({
             icon={Workflow}
             label={t("canvas.workflowTemplates")}
             onPress={() => setTemplatesOpen(true)}
+          />
+          <ToolButton
+            icon={Clapperboard}
+            label={t("story.title")}
+            onPress={() => setStoryOpen(true)}
           />
           <ToolButton
             icon={BookOpen}
@@ -982,6 +1045,8 @@ function CanvasInner({
         onOpenChange={setTemplatesOpen}
         onSelect={addTemplateAt}
       />
+
+      <StoryDialog isOpen={storyOpen} onOpenChange={setStoryOpen} />
 
       {/* Mounted only while open, so it refetches each time and its selection resets. */}
       {assetsOpen && <AssetLibraryDialog onOpenChange={setAssetsOpen} at={viewportCentre} />}

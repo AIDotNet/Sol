@@ -128,13 +128,18 @@ internal sealed class OpenAiVideoClient(
             var content = new JsonArray();
             foreach (var image in request.ReferenceImages)
             {
+                // These models fetch their references over http(s) and reject data: URLs outright,
+                // so a public asset link is sent when the deployment can publish one; the inline
+                // base64 remains for deployments without a reachable public origin.
+                var url = image.Url
+                    ?? $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}";
                 content.Add((JsonNode)new JsonObject
                 {
                     ["type"] = "image_url",
                     ["role"] = "reference_image",
                     ["image_url"] = new JsonObject
                     {
-                        ["url"] = $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}",
+                        ["url"] = url,
                     },
                 });
             }

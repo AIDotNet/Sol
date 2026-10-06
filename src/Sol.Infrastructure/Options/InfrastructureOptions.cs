@@ -88,6 +88,17 @@ public sealed class AiOptions
     public string EncryptionKey { get; set; } = string.Empty;
 
     /// <summary>
+    /// The origin reference images are published under, e.g. <c>https://sol.example.com</c>.
+    /// </summary>
+    /// <remarks>
+    /// Some upstreams accept reference images only as http(s) URLs, so the API hands out
+    /// <c>{PublicOrigin}/api/v1/canvas/assets/{id}?token=…</c> links signed with the encryption
+    /// key. Falls back to <c>Authentication:PublicOrigin</c> — the site origin proxies /api —
+    /// and when neither is set, protocols that need a URL inline the image bytes instead.
+    /// </remarks>
+    public string PublicOrigin { get; set; } = string.Empty;
+
+    /// <summary>
     /// When true, provider base URLs (and download links returned by an upstream) may resolve to
     /// loopback or private addresses — needed for a locally hosted model such as Ollama.
     /// </summary>

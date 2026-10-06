@@ -97,6 +97,7 @@ Important settings include:
 | `Ai:EncryptionKey` | Key used to encrypt stored provider API keys |
 | `Ai:AssetRoot` | Legacy local-asset fallback directory; new media is stored in PostgreSQL cloud blobs by default |
 | `Realtime:Backplane` | Set to `Redis` when multiple API nodes share a SignalR backplane |
+| `Agent:MaxToolIterations` | Model turns one Agent run may spend on tool calls (default 40; a run that spends the budget ends with a progress summary) |
 | `Skills:SandboxEnabled` | Enables approved Skill script execution through OpenSandbox |
 | `Skills:OpenSandboxDomain` | OpenSandbox API address |
 | `Skills:OpenSandboxApiKey` | OpenSandbox API key; keep it in a secret store |

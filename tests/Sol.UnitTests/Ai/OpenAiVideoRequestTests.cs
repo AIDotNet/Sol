@@ -60,6 +60,21 @@ public class OpenAiVideoRequestTests
     }
 
     [Fact]
+    public void RoutinSendsThePublicAssetUrlInsteadOfInlineBase64()
+    {
+        // The SD video models reject data: URLs outright, so a published asset link must win.
+        var body = OpenAiVideoClient.BuildRequestBody(Request(
+            Provider("routin-ai"),
+            "sd-mini-480p",
+            [new ReferenceImage([1, 2, 3], "image/png", "https://sol.example.com/api/v1/canvas/assets/abc?token=t")]));
+
+        var content = Assert.IsType<JsonArray>(body["content"]);
+        Assert.Equal(
+            "https://sol.example.com/api/v1/canvas/assets/abc?token=t",
+            (string?)content[0]?["image_url"]?["url"]);
+    }
+
+    [Fact]
     public void NonRoutinProvidersKeepTheOpenAiRequestShape()
     {
         var body = OpenAiVideoClient.BuildRequestBody(Request(Provider(null), "sora-2", []));

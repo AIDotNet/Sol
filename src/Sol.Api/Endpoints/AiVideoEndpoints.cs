@@ -93,6 +93,7 @@ public static class AiVideoEndpoints
         IVideoJobRepository jobs,
         ICanvasAssetRepository assets,
         IAssetStore assetStore,
+        IAssetLinkSigner assetLinks,
         CancellationToken ct)
     {
         if (http.GetDeviceId() is not { } deviceId)
@@ -161,7 +162,8 @@ public static class AiVideoEndpoints
             {
                 // Only our own asset paths resolve; an arbitrary URL is ignored rather than
                 // fetched, so this cannot be used as a request-forgery primitive.
-                if (await ResolveReferenceAsync(url, deviceId, assets, assetStore, ct) is { } image)
+                if (await ResolveReferenceAsync(url, deviceId, assets, assetStore, assetLinks, ct)
+                    is { } image)
                 {
                     references.Add(image);
                 }
@@ -281,6 +283,7 @@ public static class AiVideoEndpoints
         Sol.Domain.Identity.DeviceId deviceId,
         ICanvasAssetRepository assets,
         IAssetStore assetStore,
+        IAssetLinkSigner assetLinks,
         CancellationToken ct)
     {
         const string prefix = "/api/v1/canvas/assets/";
@@ -300,7 +303,11 @@ public static class AiVideoEndpoints
         using var buffer = new MemoryStream();
         await stream.CopyToAsync(buffer, ct);
 
-        return new ReferenceImage(buffer.ToArray(), asset.MediaType);
+        // The public link rides along beside the bytes: protocols whose upstream refuses inline
+        // base64 (the SD video models) submit the URL instead. Null when the deployment has no
+        // public origin, in which case those protocols have no better option than the bytes.
+        return new ReferenceImage(
+            buffer.ToArray(), asset.MediaType, assetLinks.CreatePublicUrl(assetId));
     }
 
     private static BadRequest<ErrorResponse> Invalid(string detail) =>

@@ -30,17 +30,32 @@ COPY src/Sol.Domain/Sol.Domain.csproj src/Sol.Domain/
 COPY src/Sol.Application/Sol.Application.csproj src/Sol.Application/
 COPY src/Sol.Infrastructure/Sol.Infrastructure.csproj src/Sol.Infrastructure/
 COPY src/Sol.Api/Sol.Api.csproj src/Sol.Api/
-RUN dotnet restore src/Sol.Api/Sol.Api.csproj -r "$(cat /rid)"
+# The cache mount keeps downloaded packages across attempts: a flaky TLS stream mid-restore
+# (routine when the toolchain itself runs under emulation) then costs only the missing
+# packages on retry instead of the whole download. --disable-parallel trims the concurrent
+# request fanout that trips those streams in the first place.
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet restore src/Sol.Api/Sol.Api.csproj -r "$(cat /rid)" --disable-parallel
 
 COPY src/Sol.Domain/ src/Sol.Domain/
 COPY src/Sol.Application/ src/Sol.Application/
 COPY src/Sol.Infrastructure/ src/Sol.Infrastructure/
 COPY src/Sol.Api/ src/Sol.Api/
+# Set to true when building one architecture on a host of the other (e.g. --platform
+# linux/amd64 from an Apple Silicon Mac): the amd64 ilc then runs under emulation, where its
+# multi-threaded scanner trips an access violation in the work-stealing loop. --parallelism:1
+# avoids the crashing code path entirely. Declared here so flipping it does not invalidate the
+# restore layer above. CI builds on native runners and leaves this off.
+ARG ILC_SINGLE_THREADED=false
 # appsettings.Development.json carries dev-only key material (Ai:EncryptionKey,
 # DeviceIdentity:Pepper). Shipping it in the published image would make every deployment that
 # pulls this image share one AES key for stored provider API keys — secrets must arrive via
 # environment (docker-compose) or volume instead.
-RUN dotnet publish src/Sol.Api/Sol.Api.csproj -c Release -r "$(cat /rid)" --no-restore -o /app/publish \
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    ilcArgs=""; \
+    if [ "$ILC_SINGLE_THREADED" = "true" ]; then ilcArgs="-p:IlcSingleThreaded=true"; fi; \
+    dotnet publish src/Sol.Api/Sol.Api.csproj -c Release -r "$(cat /rid)" --no-restore $ilcArgs \
+    -o /app/publish \
     && rm -f /app/publish/appsettings.Development.json
 
 # Native AOT output is self-contained; only shared native libs (openssl, zlib, …) are needed,

@@ -53,7 +53,12 @@ public sealed record ImageGenerationRequest(
     int Count,
     int? Seed);
 
-public sealed record ReferenceImage(byte[] Bytes, string MediaType);
+/// <param name="Url">
+/// An absolute, time-limited public URL for the same bytes, when the deployment publishes one.
+/// Some upstreams (the SD video models behind New API among them) refuse inline base64 and
+/// require an http(s) reference; those protocols send this and keep the bytes as fallback.
+/// </param>
+public sealed record ReferenceImage(byte[] Bytes, string MediaType, string? Url = null);
 
 public sealed record GeneratedImage(byte[] Bytes, string MediaType);
 

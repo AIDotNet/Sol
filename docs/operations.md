@@ -58,6 +58,7 @@ OpenTelemetry 1.17.0，OTLP exporter **仅在配置了 endpoint 时启用**，�
 | `DeviceIdentity:MaxCoarseFanout` | 概率关联的基数上限，默认 5 |
 | `DeviceIdentity:CoarseWindowHours` | 候选时间窗，默认 24 |
 | `Ai:EncryptionKey` | **密钥**，base64 编码的 32 字节，加密渠道 API Key |
+| `Ai:PublicOrigin` | 资产对外访问的站点源（如 `https://sol.example.com`）。部分上游（SD 视频模型）要求参考图为 http(s) 地址，API 会以此生成带签名 token 的资产链接；留空时回退到 `Authentication:PublicOrigin` |
 | `Ai:AssetRoot` | 旧版本生成图片/视频的本地兼容目录，默认 `./storage/assets`；新媒体默认写入 PostgreSQL blob |
 | `Ai:RequestTimeoutSeconds` | 上游生成请求超时，默认 1200，绑定时最低 600 |
 | `Skills:Root` | 旧版本已安装 Skill 文件的兼容读取目录，默认 `./storage/skills`；新 Skill 文件写入 PostgreSQL |

@@ -462,6 +462,38 @@ export const zh = {
     seconds: "{n} 秒",
   },
 
+  story: {
+    title: "小说转分镜视频",
+    description: "粘贴剧情文本，Agent 会自动提取角色、拆分分镜并把整条工作流铺到画布上，之后你可以逐镜微调。",
+    storyLabel: "剧情文本",
+    storyPlaceholder: "粘贴小说原文或剧情梗概…",
+    shotCount: "分镜数量",
+    duration: "每镜时长",
+    imageModel: "图片模型",
+    videoModel: "视频模型",
+    agentModel: "Agent 模型",
+    styleLabel: "画面风格",
+    styleNone: "无",
+    style: {
+      cinematic: "电影感",
+      anime: "动漫",
+      guofeng: "国风",
+      realistic: "写实",
+      storybook: "绘本",
+    },
+    generateVideos: "生成分镜视频",
+    generateVideosHint: "关闭时只生成角色立绘与分镜首帧图，视频可之后逐镜手动生成",
+    costEstimate: "预计生成 ≈{images} 张图、{videos} 段视频",
+    runActive: "已有 Agent 任务在运行，结束后才能开始",
+    start: "开始生成",
+    error: {
+      "story-required": "请先粘贴剧情文本",
+      "story-too-long": "剧情文本过长，请拆分后分批生成",
+      "image-model-required": "请先配置并选择图片模型",
+      "video-model-required": "生成视频需要先配置并选择视频模型",
+    },
+  },
+
   errors: {
     networkError: "网络请求失败",
     unauthorized: "设备身份未识别，请刷新页面",

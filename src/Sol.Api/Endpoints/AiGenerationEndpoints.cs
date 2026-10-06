@@ -695,25 +695,49 @@ public static class AiGenerationEndpoints
     }
 
     /// <summary>Streams a stored asset back to its owner.</summary>
+    /// <remarks>
+    /// Accepts two credentials: the caller's device cookie, or — for fetches made by an upstream
+    /// vendor, which holds no cookie — a signed, expiring token in the query string, minted when
+    /// the asset's URL was handed out with a generation request. The token binds the grant to one
+    /// asset id, so a valid token for another asset is still a refusal.
+    /// </remarks>
     private static async Task<Results<FileStreamHttpResult, NotFound, UnauthorizedHttpResult>>
         GetAssetAsync(
             string id,
+            string? token,
             HttpContext http,
             ICanvasAssetRepository assets,
             IAssetStore assetStore,
+            IAssetLinkSigner assetLinks,
             CancellationToken ct)
     {
-        if (http.GetDeviceId() is not { } deviceId)
+        CanvasAsset? asset;
+
+        if (!string.IsNullOrWhiteSpace(token))
         {
-            return TypedResults.Unauthorized();
+            if (!Guid.TryParse(id, out var signedId)
+                || !assetLinks.TryValidateToken(signedId, token))
+            {
+                return TypedResults.Unauthorized();
+            }
+
+            asset = await assets.FindByIdAsync(signedId, ct);
+        }
+        else
+        {
+            if (http.GetDeviceId() is not { } deviceId)
+            {
+                return TypedResults.Unauthorized();
+            }
+
+            if (!Guid.TryParse(id, out var assetId))
+            {
+                return TypedResults.NotFound();
+            }
+
+            asset = await assets.FindAsync(deviceId, assetId, ct);
         }
 
-        if (!Guid.TryParse(id, out var assetId))
-        {
-            return TypedResults.NotFound();
-        }
-
-        var asset = await assets.FindAsync(deviceId, assetId, ct);
         if (asset is null)
         {
             return TypedResults.NotFound();
@@ -726,8 +750,9 @@ public static class AiGenerationEndpoints
             return TypedResults.NotFound();
         }
 
-        // Private, not public: an asset is readable only by the device that owns it, so a shared
-        // cache must never hold it. Immutable because content at an id never changes.
+        // Private, not public: an asset is readable only by its owner's device — or by whoever
+        // holds a token minted for exactly this asset — so a shared cache must never hold it.
+        // Immutable because content at an id never changes.
         http.Response.Headers.CacheControl = "private, max-age=31536000, immutable";
 
         // Stops a browser from second-guessing the stored media type. Combined with the upload

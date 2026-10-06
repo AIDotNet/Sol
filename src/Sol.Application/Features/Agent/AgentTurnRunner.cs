@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Options;
 using Sol.Application.Abstractions.Ai;
 using Sol.Application.Abstractions.Persistence;
 using Sol.Application.Abstractions.Realtime;
@@ -28,10 +29,10 @@ public sealed class AgentTurnRunner(
     IAgentRealtimeSink realtime,
     IAgentCanvasBridge canvasBridge,
     ICanvasAssetRepository assets,
-    IAssetStore assetStore)
+    IAssetStore assetStore,
+    IOptions<AgentOptions> configuredOptions)
 {
     private const int DefaultMaxOutputTokens = 16_000;
-    private const int MaxIterations = 20;
 
     public async Task RunAsync(AgentRunId runId, CancellationToken ct)
     {
@@ -108,8 +109,9 @@ public sealed class AgentTurnRunner(
         var mcpBindings = await LoadMcpToolsAsync(run, tools, ct);
         var totalInputTokens = 0;
         var totalOutputTokens = 0;
+        var maxIterations = configuredOptions.Value.MaxToolIterations;
 
-        for (var iteration = 0; iteration < MaxIterations; iteration++)
+        for (var iteration = 0; iteration < maxIterations; iteration++)
         {
             var turn = await StreamTurnAsync(
                 run,
@@ -176,9 +178,21 @@ public sealed class AgentTurnRunner(
                 return;
             }
 
-            if (iteration == MaxIterations - 1)
+            if (iteration == maxIterations - 1)
             {
-                await FailAsync(run, $"The Agent exceeded its {MaxIterations}-iteration tool limit.", ct);
+                await FinishAtIterationLimitAsync(
+                    run,
+                    provider.ResolveProtocol(model),
+                    provider,
+                    apiKey,
+                    model.MaxOutputTokens is > 0 and <= 64_000
+                        ? model.MaxOutputTokens.Value
+                        : DefaultMaxOutputTokens,
+                    messages,
+                    maxIterations,
+                    totalInputTokens,
+                    totalOutputTokens,
+                    ct);
                 return;
             }
 
@@ -904,6 +918,127 @@ public sealed class AgentTurnRunner(
                 Guid.CreateVersion7(), run.SessionId, run.Id, run.DeviceId, ordinal,
                 role, SerializeBlocks(blocks), DateTimeOffset.UtcNow),
             ct);
+    }
+
+    /// <summary>
+    /// Ends a run that spent its whole tool budget.
+    ///
+    /// Failing outright would read as "nothing happened" while the canvas may already hold most
+    /// of the requested graph — an orchestration builds nodes tool call by tool call. So the
+    /// model gets one final tool-free turn to summarize what was built and what remains; the
+    /// summary is stored like any assistant message and the run succeeds. A summary turn that
+    /// itself errors or refuses falls back to the plain limit failure.
+    /// </summary>
+    /// <remarks>
+    /// The limit check runs before the tool loop, so the last assistant turn can carry
+    /// <c>tool_use</c> blocks that were never answered. Every protocol rejects a dangling
+    /// tool_use — and would reject the summary request outright — so they are closed out with
+    /// synthetic error results first. This also keeps the durable session valid for whatever the
+    /// user asks next in the same conversation.
+    /// </remarks>
+    private async Task FinishAtIterationLimitAsync(
+        AgentRun run,
+        ProviderType protocol,
+        AiProvider provider,
+        string apiKey,
+        int maxOutputTokens,
+        List<AgentModelMessage> messages,
+        int maxIterations,
+        int totalInputTokens,
+        int totalOutputTokens,
+        CancellationToken ct)
+    {
+        var answered = new HashSet<string>(
+            messages.SelectMany(message => message.Content)
+                .Where(block => block.Kind == AgentContentKind.ToolResult)
+                .Select(block => block.ToolUseId)
+                .Where(id => id is not null)
+                .Select(id => id!));
+
+        var closing = messages
+            .LastOrDefault(message => message.Role == AgentMessageRole.Assistant)
+            ?.Content
+            .Where(block => block.Kind == AgentContentKind.ToolUse
+                && block.ToolUseId is not null
+                && !answered.Contains(block.ToolUseId))
+            .ToList() ?? [];
+
+        // One user turn: synthetic tool results first (every serializer orders them before text),
+        // then the summary instruction. The stored round-trip reconstructs the same shape.
+        var userBlocks = closing.ConvertAll(use => new AgentContentBlock(
+            AgentContentKind.ToolResult,
+            ToolUseId: use.ToolUseId,
+            Json: "{\"status\":\"error\",\"error\":\"run_budget_exhausted\"}",
+            IsError: true));
+        userBlocks.Add(new AgentContentBlock(
+            AgentContentKind.Text,
+            Text: "You have reached the tool-call limit for this run. Do not attempt any further " +
+                  "tool calls. Write a short progress report instead: what was completed, what " +
+                  "is unfinished, and the single next step the user can take to continue."));
+        await InsertMessageAsync(run, "user", userBlocks, ct);
+        messages.Add(new AgentModelMessage(AgentMessageRole.User, userBlocks));
+
+        var turn = await StreamTurnAsync(
+            run,
+            protocol,
+            new AgentModelRequest(
+                provider,
+                apiKey,
+                run.ModelKey,
+                AgentSystemPrompt.Text,
+                messages,
+                [],
+                maxOutputTokens,
+                SupportsThinking: false),
+            ct);
+
+        if (turn.InputTokens is { } inputTokens) totalInputTokens += inputTokens;
+        if (turn.OutputTokens is { } outputTokens) totalOutputTokens += outputTokens;
+
+        if (turn.Error is not null || turn.StopReason is "refusal" or "max_tokens")
+        {
+            await FailAsync(
+                run,
+                $"The Agent reached its {maxIterations}-iteration tool limit before finishing.",
+                ct);
+            return;
+        }
+
+        // An empty summary is not a report; say why the run stopped instead of publishing "".
+        var summaryText = turn.Text;
+        if (string.IsNullOrWhiteSpace(summaryText)
+            && turn.Blocks.All(block => block.Kind != AgentContentKind.Text))
+        {
+            await FailAsync(
+                run,
+                $"The Agent reached its {maxIterations}-iteration tool limit before finishing.",
+                ct);
+            return;
+        }
+
+        if (turn.Blocks.Count > 0)
+        {
+            await InsertMessageAsync(run, "assistant", turn.Blocks, ct);
+        }
+
+        var finished = DateTimeOffset.UtcNow;
+        var completed = run with
+        {
+            Status = AgentRunStatus.Succeeded,
+            Iteration = maxIterations,
+            InputTokens = totalInputTokens,
+            OutputTokens = totalOutputTokens,
+            FinishedAt = finished,
+            UpdatedAt = finished,
+        };
+        await agents.UpdateRunAsync(completed, ct);
+
+        var payload = new JsonObject
+        {
+            ["text"] = summaryText,
+            ["stopReason"] = turn.StopReason ?? "end_turn",
+        }.ToJsonString();
+        await PublishStoredAsync(completed, "run.succeeded", payload, summaryText, null, ct);
     }
 
     private async Task FailAsync(AgentRun run, string error, CancellationToken ct)

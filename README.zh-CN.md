@@ -101,6 +101,7 @@ API 面向 Native AOT 构建。JSON 元数据使用源生成，Dapper 调用集�
 | `Ai:EncryptionKey` | 加密保存渠道 API Key 的密钥 |
 | `Ai:AssetRoot` | 旧版本本地素材的兼容读取目录；新素材默认写入 PostgreSQL 云端 blob |
 | `Realtime:Backplane` | 多个 API 节点时设为 `Redis` 以启用 SignalR backplane |
+| `Agent:MaxToolIterations` | 单次 Agent run 可用于工具调用的模型轮次上限（默认 40；预算用尽的 run 会以进度总结收尾而非直接报错） |
 | `Skills:SandboxEnabled` | 是否通过 OpenSandbox 执行已审批的 Skill 脚本 |
 | `Skills:OpenSandboxDomain` | OpenSandbox API 地址 |
 | `Skills:OpenSandboxApiKey` | OpenSandbox API Key；应保存在密钥管理服务中 |
