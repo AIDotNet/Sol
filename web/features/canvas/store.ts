@@ -62,6 +62,14 @@ interface CanvasState {
   onNodesChange: (changes: NodeChange<CanvasNode>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
+  /**
+   * Adds several edges as one undoable canvas edit.
+   *
+   * `onConnect` snapshots history per call, so a batched connect through it would cost one
+   * Ctrl+Z per edge. Duplicate connections are skipped (React Flow's `addEdge` already
+   * dedupes); the return lists only the edges that were actually created.
+   */
+  connectBatch: (connections: Connection[]) => string[];
 
   addNode: (kind: NodeKind, position: { x: number; y: number }, data?: Partial<CanvasNodeData>) => string;
   /** Adds a connected workflow starter as one undoable canvas edit. */
@@ -221,6 +229,25 @@ export const useCanvasStore = create<CanvasState>((set, get) => {
       pushHistory();
       set((state) => ({ edges: addEdge({ ...connection, type: "default" }, state.edges) }));
       bump();
+    },
+
+    connectBatch: (connections) => {
+      if (connections.length === 0) return [];
+
+      pushHistory();
+      let created: string[] = [];
+      set((state) => {
+        let edges = state.edges;
+        created = [];
+        for (const connection of connections) {
+          const before = edges.length;
+          edges = addEdge({ ...connection, type: "default" }, edges);
+          if (edges.length > before) created.push(edges[edges.length - 1].id);
+        }
+        return { edges };
+      });
+      bump();
+      return created;
     },
 
     addNode: (kind, position, data) => {

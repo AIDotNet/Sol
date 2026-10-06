@@ -101,6 +101,7 @@ export function createRun(
     prompt: string;
     images?: AgentImageAttachment[];
     executorConnectionId?: string | null;
+    canvasContext?: string | null;
   },
 ): Promise<AgentRun> {
   return request(`/sessions/${encodeURIComponent(sessionId)}/runs`, {

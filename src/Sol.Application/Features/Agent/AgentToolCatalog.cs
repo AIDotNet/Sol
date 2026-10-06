@@ -86,9 +86,9 @@ public static class AgentToolCatalog
             "connect_nodes",
             AgentToolSite.Canvas,
             AgentApprovalPolicy.Never,
-            "Connect a source node to a target node. Cycles and duplicate edges are rejected.",
+            "Connect nodes. Pass a single {sourceId, targetId} pair, or {connections: [...]} to create up to 100 edges in one undoable step; per-connection errors (cycle, duplicate, unknown node) are reported without failing the whole batch. Returns the created edge ids.",
             """
-            {"type":"object","properties":{"sourceId":{"type":"string"},"targetId":{"type":"string"}},"required":["sourceId","targetId"],"additionalProperties":false}
+            {"type":"object","properties":{"sourceId":{"type":"string"},"targetId":{"type":"string"},"connections":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"object","properties":{"sourceId":{"type":"string"},"targetId":{"type":"string"}},"required":["sourceId","targetId"],"additionalProperties":false}}},"additionalProperties":false}
             """),
         new(
             "select_nodes",
@@ -142,9 +142,18 @@ public static class AgentToolCatalog
             "run_node",
             AgentToolSite.Canvas,
             AgentApprovalPolicy.Never,
-            "Run an image-generation or video-generation node and wait until its browser orchestration reaches a terminal outcome.",
+            "Run one image-generation or video-generation node and wait until its browser orchestration reaches a terminal outcome.",
             """
             {"type":"object","properties":{"nodeId":{"type":"string"}},"required":["nodeId"],"additionalProperties":false}
+            """,
+            TimeoutMilliseconds: 600_000),
+        new(
+            "run_nodes",
+            AgentToolSite.Canvas,
+            AgentApprovalPolicy.Never,
+            "Run up to 8 independent image/video generation nodes concurrently in one call and wait for all of them. Use this instead of repeated run_node calls when several generations do not depend on each other; results are grouped per node with per-node errors.",
+            """
+            {"type":"object","properties":{"nodeIds":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":8}},"required":["nodeIds"],"additionalProperties":false}
             """,
             TimeoutMilliseconds: 600_000),
         new(

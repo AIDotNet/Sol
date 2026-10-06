@@ -33,6 +33,7 @@ import { ModelIcon } from "@/features/ai/provider-icons";
 import { uploadAsset } from "@/features/ai/api";
 import { resolveSlot, useAiStore } from "@/features/ai/store";
 import { resolveProtocol } from "@/features/ai/types";
+import { buildCanvasContextText } from "@/features/agent/canvas-context";
 import { useAgentStore } from "@/features/agent/store";
 import {
   isAgentRunActive,
@@ -88,6 +89,7 @@ const TOOL_LABELS = {
   move_nodes: "agent.toolNames.moveNodes",
   resize_node: "agent.toolNames.resizeNode",
   run_node: "agent.toolNames.runNode",
+  run_nodes: "agent.toolNames.runNodes",
   retry_node: "agent.toolNames.retryNode",
   cancel_node: "agent.toolNames.cancelNode",
   manage_canvas: "agent.toolNames.manageCanvas",
@@ -121,6 +123,7 @@ function ModelCapabilityBadges({
 export function AgentPanel() {
   const t = useT();
   const canvasNodes = useCanvasStore((state) => state.nodes);
+  const edges = useCanvasStore((state) => state.edges);
   const providers = useAiStore((state) => state.providers);
   const slots = useAiStore((state) => state.slots);
   const setOpen = useAgentStore((state) => state.setOpen);
@@ -221,6 +224,12 @@ export function AgentPanel() {
     () => canvasNodes.filter((node) => node.selected).map((node) => summarizeSelectedNode(node, t)),
     [canvasNodes, t],
   );
+  // Snapshot at send time: this page is the run's executor, so what it sees is what the Agent
+  // should be told about — selection, node overview — without a read_canvas probe per request.
+  const canvasContext = useMemo(
+    () => buildCanvasContextText(canvasNodes, edges),
+    [canvasNodes, edges],
+  );
 
   function submit() {
     if (!canSend || !selected) return;
@@ -234,6 +243,7 @@ export function AgentPanel() {
       modelKey: selected.modelKey,
       prompt: value,
       images: selectedImages,
+      canvasContext,
     });
   }
 

@@ -18,7 +18,7 @@ public sealed class AgentRepository(SolConnectionFactory connections) : IAgentRe
     private const string RunColumns = """
         run_id, session_id, device_id, canvas_id, provider_id, model_key, status,
         executor_connection_id, iteration, last_seq, error, input_tokens, output_tokens,
-        started_at, finished_at, created_at, updated_at
+        started_at, finished_at, created_at, updated_at, canvas_context_json
         """;
 
     public async Task<AgentSession?> FindSessionAsync(
@@ -110,11 +110,12 @@ public sealed class AgentRepository(SolConnectionFactory connections) : IAgentRe
             INSERT INTO agent_run
                 (run_id, session_id, device_id, canvas_id, provider_id, model_key, status,
                  executor_connection_id, iteration, last_seq, error, input_tokens, output_tokens,
-                 started_at, finished_at, created_at, updated_at)
+                 started_at, finished_at, created_at, updated_at, canvas_context_json)
             VALUES
                 (@RunId, @SessionId, @DeviceId, @CanvasId, @ProviderId, @ModelKey, @Status,
                  @ExecutorConnectionId, @Iteration::smallint, @LastSequence, @Error,
-                 @InputTokens, @OutputTokens, @StartedAt, @FinishedAt, @CreatedAt, @UpdatedAt)
+                 @InputTokens, @OutputTokens, @StartedAt, @FinishedAt, @CreatedAt, @UpdatedAt,
+                 @CanvasContextJson)
             """,
             AgentRunParams.From(run));
     }
@@ -510,6 +511,7 @@ internal sealed class AgentRunParams
     public DateTimeOffset? FinishedAt { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
+    public string? CanvasContextJson { get; init; }
 
     public static AgentRunParams From(AgentRun run) => new()
     {
@@ -530,6 +532,7 @@ internal sealed class AgentRunParams
         FinishedAt = run.FinishedAt,
         CreatedAt = run.CreatedAt,
         UpdatedAt = run.UpdatedAt,
+        CanvasContextJson = run.CanvasContextJson,
     };
 }
 
@@ -643,13 +646,14 @@ internal sealed class AgentRunRow
     public DateTime? FinishedAt { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
+    public string? CanvasContextJson { get; init; }
 
     public AgentRun ToDomain() => new(
         new AgentRunId(RunId), new AgentSessionId(SessionId), new DeviceId(DeviceId),
         new CanvasId(CanvasId), ProviderId is { } provider ? new ProviderId(provider) : null,
         ModelKey, AgentRepository.ParseStatus(Status), ExecutorConnectionId, Iteration, LastSeq,
         Error, InputTokens, OutputTokens, UtcOrNull(StartedAt), UtcOrNull(FinishedAt),
-        Utc(CreatedAt), Utc(UpdatedAt));
+        Utc(CreatedAt), Utc(UpdatedAt), CanvasContextJson);
 
     private static DateTimeOffset Utc(DateTime value) =>
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc));

@@ -8,4 +8,13 @@
     <PackageReference Include="FluentValidation" />
   </ItemGroup>
 
+  <!--
+    Built-in Skills ship inside the assembly (same AOT-friendly approach as the SQL migrations):
+    a single binary carries the starter skill library, and the catalog reads them via
+    GetManifestResourceStream. LogicalName keeps folder slashes out of resource names.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Features/Agent/BuiltInSkills/**/*" LogicalName="Sol.BuiltInSkills.%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

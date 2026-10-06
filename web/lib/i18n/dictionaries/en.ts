@@ -232,6 +232,9 @@ export const en: Dictionary = {
     riskSafe: "Safe",
     riskWarning: "Warning",
     riskDanger: "Danger",
+    builtInTitle: "Built-in skills",
+    builtInBadge: "Built-in",
+    builtInDescription: "Read-only skills that ship with Sol and are always available to the Agent. Install a skill with the same slug to override it.",
   },
 
   urlConfig: {
@@ -382,6 +385,7 @@ export const en: Dictionary = {
       moveNodes: "Move nodes",
       resizeNode: "Resize node",
       runNode: "Run node",
+      runNodes: "Run nodes in parallel",
       retryNode: "Retry node",
       cancelNode: "Cancel node",
       manageCanvas: "Manage canvas",
@@ -491,7 +495,7 @@ export const en: Dictionary = {
       storybook: "Storybook",
     },
     generateVideos: "Generate shot videos",
-    generateVideosHint: "Off: only character portraits and storyboard frames — videos can be run per shot later",
+    generateVideosHint: "Off: only character turnaround sheets and storyboard frames — videos can be run per shot later",
     costEstimate: "Will generate ≈{images} images and {videos} videos",
     runActive: "An Agent run is active — start after it finishes",
     start: "Start",

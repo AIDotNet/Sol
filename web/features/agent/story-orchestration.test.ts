@@ -140,4 +140,43 @@ describe("buildStoryPrompt", () => {
     expect(prompt).toContain("Layout convention");
     expect(prompt).toContain("retry_node");
   });
+
+  it("builds characters as a layered dossier plus a multi-view turnaround sheet (zh)", () => {
+    const prompt = buildStoryPrompt(BASE);
+    // Structured anatomy dossier, not a one-line appearance note.
+    expect(prompt).toContain("【档案】{角色名}");
+    expect(prompt).toContain("服装-外层");
+    expect(prompt).toContain("服装-中层与底层");
+    expect(prompt).toContain("鞋履与配饰");
+    expect(prompt).toContain("色板");
+    // Multi-view sheet replaces the single portrait, and is landscape.
+    expect(prompt).toContain("角色三视图设定图，同一角色");
+    expect(prompt).toContain("正面视图、侧面视图、背面视图");
+    // Character imageGen is 16:9 now; the legacy 3:4 portrait is gone.
+    expect(prompt.match(/aspect="3:4"/g)).toBeNull();
+    // Shots reference the sheet image, and wiring goes through one batch connect.
+    expect(prompt).toContain("三视图设定图 image → 该镜 imageGen");
+    expect(prompt).toContain("一条 connect_nodes 的 connections");
+  });
+
+  it("keeps shot prompts accountable for restating character traits (zh)", () => {
+    const prompt = buildStoryPrompt(BASE);
+    expect(prompt).toContain("每个出场角色必须点名，并逐个复述其档案中的发型、服装主色与标志性配饰");
+  });
+
+  it("mirrors the dossier and turnaround pipeline in English", () => {
+    const prompt = buildStoryPrompt({ ...BASE, locale: "en" });
+    expect(prompt).toContain("[DOSSIER] {name}");
+    expect(prompt).toContain("Outfit outer layer");
+    expect(prompt).toContain("Palette: at most 5 primary colors");
+    expect(prompt).toContain("Character reference sheet, turnaround of the same character");
+    expect(prompt).toContain("front view, side view, and back view");
+    expect(prompt).toContain("turnaround sheet image → its imageGen");
+  });
+
+  it("prices one sheet per character, unchanged by the richer character stage", () => {
+    // The dossier text and the turnaround are one generation per character: the estimate
+    // must not drift just because phase 1 got deeper.
+    expect(estimateStoryRun(6, false).images).toBe(MAX_STORY_CHARACTERS + 6);
+  });
 });

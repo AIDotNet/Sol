@@ -16,7 +16,9 @@ public sealed record CreateAgentRunRequest(
     string ModelKey,
     string Prompt,
     string? ExecutorConnectionId,
-    string[]? Images = null);
+    string[]? Images = null,
+    /// <summary>Client-formatted canvas snapshot text (selection, node overview). Opaque server-side.</summary>
+    string? CanvasContext = null);
 
 public sealed record AgentRunResponse(
     string Id,

@@ -19,6 +19,8 @@ interface SendPromptInput {
   modelKey: string;
   prompt: string;
   images?: AgentImageAttachment[];
+  /** Compact canvas snapshot (selection, overview) built by the sending page. */
+  canvasContext?: string | null;
 }
 
 interface AgentState {
@@ -459,7 +461,7 @@ export const useAgentStore = create<AgentState>((set, get) => {
       }
     },
 
-    sendPrompt: async ({ providerId, modelKey, prompt, images = [] }) => {
+    sendPrompt: async ({ providerId, modelKey, prompt, images = [], canvasContext = null }) => {
       const trimmed = prompt.trim();
       const canvasId = get().canvasId;
       if (
@@ -495,6 +497,7 @@ export const useAgentStore = create<AgentState>((set, get) => {
           prompt: trimmed,
           images,
           executorConnectionId,
+          canvasContext,
         });
         if (get().canvasId !== canvasId) return;
 

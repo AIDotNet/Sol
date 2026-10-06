@@ -14,6 +14,7 @@ public static class AgentEndpoints
     private const int MaxPromptLength = 100_000;
     private const int MaxTitleLength = 200;
     private const int MaxAgentImages = 8;
+    private const int MaxCanvasContextLength = 24_000;
 
     public static IEndpointRouteBuilder MapAgentEndpoints(this IEndpointRouteBuilder app)
     {
@@ -133,6 +134,10 @@ public static class AgentEndpoints
         if (string.IsNullOrWhiteSpace(request.Prompt)) return Invalid("a prompt is required");
         if (request.Prompt.Length > MaxPromptLength) return Invalid("the prompt is too long");
         if (request.ExecutorConnectionId is { Length: > 200 }) return Invalid("the connection id is too long");
+        if (request.CanvasContext is { Length: > MaxCanvasContextLength })
+        {
+            return Invalid("the canvas context is too long");
+        }
 
         if (await agents.FindActiveRunAsync(deviceId, session.CanvasId, ct) is not null)
         {
@@ -187,7 +192,8 @@ public static class AgentEndpoints
         var run = new AgentRun(
             AgentRunId.New(), session.Id, deviceId, session.CanvasId, provider.Id,
             request.ModelKey, AgentRunStatus.Queued, ExecutorConnectionId: null, 0, 0,
-            null, null, null, null, null, now, now);
+            null, null, null, null, null, now, now,
+            string.IsNullOrWhiteSpace(request.CanvasContext) ? null : request.CanvasContext);
         await agents.InsertRunAsync(run, ct);
 
         var ordinal = await agents.NextMessageOrdinalAsync(deviceId, session.Id, ct);

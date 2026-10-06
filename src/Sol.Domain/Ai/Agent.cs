@@ -77,7 +77,9 @@ public sealed record AgentRun(
     DateTimeOffset? StartedAt,
     DateTimeOffset? FinishedAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    /// <summary>Canvas snapshot text the executor browser attached when starting the run.</summary>
+    string? CanvasContextJson = null);
 
 public sealed record AgentStoredMessage(
     Guid MessageId,

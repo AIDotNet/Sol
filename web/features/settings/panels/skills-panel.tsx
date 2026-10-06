@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Loader2, ShieldCheck, Trash2, TriangleAlert, Upload } from "lucide-react";
+import { BookMarked, FileText, Loader2, ShieldCheck, Trash2, TriangleAlert, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ export function SkillsPanel() {
   const t = useT();
   const input = useRef<HTMLInputElement>(null);
   const skills = useSkillsStore((state) => state.skills);
+  const builtInSkills = useSkillsStore((state) => state.builtInSkills);
   const sandboxEnabled = useSkillsStore((state) => state.sandboxEnabled);
   const loading = useSkillsStore((state) => state.loading);
   const loaded = useSkillsStore((state) => state.loaded);
@@ -184,6 +185,41 @@ export function SkillsPanel() {
           ))}
         </PanelBody>
       )}
+
+      {loaded && builtInSkills.length > 0 ? (
+        <PanelBody className="gap-3">
+          <div>
+            <h2 className="text-xs font-medium text-muted-foreground">{t("skills.builtInTitle")}</h2>
+            <p className="mt-0.5 text-[0.6875rem] text-muted-foreground/80">
+              {t("skills.builtInDescription")}
+            </p>
+          </div>
+          {builtInSkills.map((skill) => (
+            <article
+              key={skill.slug}
+              className="flex items-start gap-3 rounded-lg border border-dashed p-3"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <BookMarked className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="truncate text-sm font-medium">{skill.name}</h3>
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[0.625rem] text-muted-foreground">
+                    {t("skills.builtInBadge")}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {skill.description || t("skills.noDescription")}
+                </p>
+                <p className="mt-1 font-mono text-[0.625rem] text-muted-foreground/80">
+                  {skill.slug} · {skill.files.length}
+                </p>
+              </div>
+            </article>
+          ))}
+        </PanelBody>
+      ) : null}
 
       <Dialog
         isOpen={file !== null}

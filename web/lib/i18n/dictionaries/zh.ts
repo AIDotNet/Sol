@@ -224,6 +224,9 @@ export const zh = {
     riskSafe: "安全",
     riskWarning: "警告",
     riskDanger: "危险",
+    builtInTitle: "内置技能",
+    builtInBadge: "内置",
+    builtInDescription: "随 Sol 发布、始终对 Agent 可用的只读技能。安装同名 Skill 可覆盖内置版本。",
   },
 
   urlConfig: {
@@ -373,6 +376,7 @@ export const zh = {
       moveNodes: "移动节点",
       resizeNode: "调整节点大小",
       runNode: "运行节点",
+      runNodes: "并行运行节点",
       retryNode: "重试节点",
       cancelNode: "取消节点",
       manageCanvas: "管理画布",
@@ -482,7 +486,7 @@ export const zh = {
       storybook: "绘本",
     },
     generateVideos: "生成分镜视频",
-    generateVideosHint: "关闭时只生成角色立绘与分镜首帧图，视频可之后逐镜手动生成",
+    generateVideosHint: "关闭时只生成角色三视图设定图与分镜首帧图，视频可之后逐镜手动生成",
     costEstimate: "预计生成 ≈{images} 张图、{videos} 段视频",
     runActive: "已有 Agent 任务在运行，结束后才能开始",
     start: "开始生成",

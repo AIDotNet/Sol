@@ -18,7 +18,7 @@ import {
   rotateImage,
   upscaleImage,
 } from "@/features/canvas/image-ops";
-import { useCanvasStore, type CanvasNode } from "@/features/canvas/store";
+import { useCanvasStore, type CanvasEdge, type CanvasNode } from "@/features/canvas/store";
 import {
   ASPECT_RATIOS,
   IMAGE_OUTPUT_FORMATS,
@@ -27,7 +27,7 @@ import {
   type CanvasNodeData,
   type NodeKind,
 } from "@/features/canvas/types";
-import { wouldCreateCycle } from "@/features/canvas/upstream";
+import { wouldCreateCycle, collectUpstream } from "@/features/canvas/upstream";
 import type { AgentToolCallEnvelope } from "@/features/agent/types";
 
 export const AGENT_CANVAS_TOOL_NAMES = [
@@ -45,6 +45,7 @@ export const AGENT_CANVAS_TOOL_NAMES = [
   "move_nodes",
   "resize_node",
   "run_node",
+  "run_nodes",
   "retry_node",
   "cancel_node",
   "manage_canvas",
@@ -159,6 +160,55 @@ async function execute(
     }
 
     case "connect_nodes": {
+      // Batch form: { connections: [{sourceId, targetId}, ...] }. Each entry is validated
+      // independently — a bad edge is reported per item instead of failing the whole batch —
+      // and every created edge lands in one undo step via `connectBatch`.
+      if (input.connections !== undefined) {
+        const connections = connectBatchInput(input.connections);
+        if (connections.length === 0) throw new Error("empty_connections");
+        const known = new Set(state.nodes.map((node) => node.id));
+        const existing = new Set(
+          state.edges.map((edge) => `${edge.source}\u0000${edge.target}`),
+        );
+        const errors: Array<{ sourceId: string; targetId: string; error: string }> = [];
+        const valid: Array<{ sourceId: string; targetId: string }> = [];
+        for (const connection of connections) {
+          const rejection = checkConnection(connection, known, existing, state.edges);
+          if (rejection) {
+            errors.push({ ...connection, error: rejection });
+          } else {
+            valid.push(connection);
+            existing.add(`${connection.sourceId}\u0000${connection.targetId}`);
+          }
+        }
+
+        const edgeIdByPair = new Map<string, string>();
+        if (valid.length > 0) {
+          const createdIds = state.connectBatch(
+            valid.map((connection) => ({
+              source: connection.sourceId,
+              target: connection.targetId,
+              sourceHandle: null,
+              targetHandle: null,
+            })),
+          );
+          // `connectBatch` preserves order, so ids line up with the validated entries.
+          valid.forEach((connection, index) => {
+            edgeIdByPair.set(`${connection.sourceId}\u0000${connection.targetId}`, createdIds[index]);
+          });
+        }
+
+        const created = valid.map((connection) => ({
+          sourceId: connection.sourceId,
+          targetId: connection.targetId,
+          edgeId: edgeIdByPair.get(`${connection.sourceId}\u0000${connection.targetId}`) ?? null,
+        }));
+        if (created.length === 0) {
+          throw new Error(errors[0]?.error ?? "no_connection_created");
+        }
+        return { connections: created, errors };
+      }
+
       const sourceId = requiredString(input.sourceId, "sourceId");
       const targetId = requiredString(input.targetId, "targetId");
       const ids = new Set(state.nodes.map((node) => node.id));
@@ -274,6 +324,76 @@ async function execute(
       if (node.type === "imageGen") await runImageNode(nodeId, state.nodes, state.edges);
       else await runVideoNode(nodeId, state.nodes, state.edges);
       return generationOutputs(before);
+    }
+
+    case "run_nodes": {
+      // Batch generation: independent config nodes run concurrently in the browser (the
+      // execution engine keys in-flight runs by run id, so parallel generations never contend),
+      // while the server still sees one tool call with one aggregated, replayable result.
+      const nodeIds = stringArray(input.nodeIds, "nodeIds", 8);
+      if (nodeIds.length === 0) throw new Error("empty_node_ids");
+
+      const generationNodes = nodeIds.map((nodeId) => {
+        const node = state.nodes.find((candidate) => candidate.id === nodeId);
+        if (!node || (node.type !== "imageGen" && node.type !== "videoGen")) {
+          throw new Error(`generation_node_not_found:${nodeId}`);
+        }
+        const data = node.data as { providerId?: unknown; modelId?: unknown };
+        if (!data.providerId || !data.modelId) {
+          throw new Error(`generation_node_not_configured:${nodeId}`);
+        }
+        // `runImageNode`/`runVideoNode` fail silently on a disconnected node; surface that to the
+        // model here instead, where it becomes a per-node error it can act on.
+        const upstream = collectUpstream(nodeId, state.nodes, state.edges);
+        if (!upstream.prompt && upstream.images.length === 0) {
+          throw new Error(`generation_node_missing_input:${nodeId}`);
+        }
+        return { nodeId, type: node.type as "imageGen" | "videoGen" };
+      });
+
+      const before = new Set(state.nodes.map((candidate) => candidate.id));
+      const settled = await Promise.allSettled(
+        generationNodes.map(({ nodeId, type }) => {
+          // Read a fresh snapshot per node so nodes and edges created earlier in this run are
+          // picked up even though `state` was captured at dispatch.
+          const snapshot = useCanvasStore.getState();
+          return type === "imageGen"
+            ? runImageNode(nodeId, snapshot.nodes, snapshot.edges)
+            : runVideoNode(nodeId, snapshot.nodes, snapshot.edges);
+        }),
+      );
+
+      // Output nodes are spawned from their config node with an edge config → output, so that
+      // edge — not a run id — attributes each new image/video node to the request that made it.
+      const after = useCanvasStore.getState();
+      const outputsFor = (configNodeId: string): object[] =>
+        after.nodes
+          .filter((node) => !before.has(node.id) && (node.type === "image" || node.type === "video"))
+          .filter((node) =>
+            after.edges.some((edge) => edge.source === configNodeId && edge.target === node.id),
+          )
+          .map((node) => ({
+            nodeId: node.id,
+            type: node.type,
+            assetUrl: (node.data as { assetUrl?: string }).assetUrl ?? null,
+            jobId: (node.data as { jobId?: string }).jobId ?? null,
+            execution: (node.data as { execution?: unknown }).execution ?? null,
+          }));
+
+      const results = generationNodes.map(({ nodeId }, index) => {
+        const outcome = settled[index];
+        if (outcome.status === "rejected") {
+          return {
+            nodeId,
+            ok: false,
+            error: outcome.reason instanceof Error ? outcome.reason.message : "run_failed",
+            outputs: [] as object[],
+          };
+        }
+        return { nodeId, ok: true, outputs: outputsFor(nodeId) };
+      });
+
+      return { results };
     }
 
     case "retry_node": {
@@ -507,14 +627,14 @@ async function runModelImageEdit(
     { x: source.position.x + sourceWidth + 80, y: source.position.y },
     { providerId, modelId, count: 1 },
   );
-  for (const inputNodeId of [sourceNodeId, ...additionalImageNodeIds, promptNodeId]) {
-    useCanvasStore.getState().onConnect({
+  useCanvasStore.getState().connectBatch(
+    [sourceNodeId, ...additionalImageNodeIds, promptNodeId].map((inputNodeId) => ({
       source: inputNodeId,
       target: generationNodeId,
       sourceHandle: null,
       targetHandle: null,
-    });
-  }
+    })),
+  );
 
   const before = new Set(useCanvasStore.getState().nodes.map((node) => node.id));
   const snapshot = useCanvasStore.getState();
@@ -660,6 +780,42 @@ function inpaintStrokes(value: unknown): Array<{
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`invalid_${field}`);
   return value;
+}
+
+/** Parses the batch form of `connect_nodes` input. Shape errors are fatal; semantic checks are per item. */
+function connectBatchInput(
+  value: unknown,
+): Array<{ sourceId: string; targetId: string }> {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 100) {
+    throw new Error("invalid_connections");
+  }
+  return value.map((item) => {
+    if (!isObject(item)) throw new Error("invalid_connection");
+    return {
+      sourceId: requiredString(item.sourceId, "sourceId"),
+      targetId: requiredString(item.targetId, "targetId"),
+    };
+  });
+}
+
+/** Semantic validation for one candidate connection; returns a rejection code or null. */
+function checkConnection(
+  connection: { sourceId: string; targetId: string },
+  knownNodeIds: Set<string>,
+  existingPairs: Set<string>,
+  edges: CanvasEdge[],
+): string | null {
+  if (connection.sourceId === connection.targetId) return "self_connection";
+  if (!knownNodeIds.has(connection.sourceId) || !knownNodeIds.has(connection.targetId)) {
+    return "node_not_found";
+  }
+  if (existingPairs.has(`${connection.sourceId}\u0000${connection.targetId}`)) {
+    return "edge_already_exists";
+  }
+  if (wouldCreateCycle(connection.sourceId, connection.targetId, edges)) {
+    return "connection_would_create_cycle";
+  }
+  return null;
 }
 
 function stringArray(value: unknown, field: string, max: number): string[] {

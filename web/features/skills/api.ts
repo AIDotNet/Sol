@@ -28,6 +28,13 @@ export interface Skill extends Omit<SkillScan, "files"> {
   updatedAt: string;
 }
 
+export interface BuiltInSkill {
+  slug: string;
+  name: string;
+  description: string;
+  files: string[];
+}
+
 export class SkillApiError extends Error {
   constructor(
     message: string,
@@ -74,6 +81,11 @@ export interface SkillList {
 
 export function listSkills(): Promise<SkillList> {
   return request("/");
+}
+
+export async function listBuiltInSkills(): Promise<BuiltInSkill[]> {
+  const response = await request<{ skills: BuiltInSkill[] }>("/builtin");
+  return response.skills;
 }
 
 export function scanSkill(file: File): Promise<SkillScan> {

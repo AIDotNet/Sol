@@ -7,6 +7,7 @@ using Sol.Application.Abstractions.Ai;
 using Sol.Application.Abstractions.Persistence;
 using Sol.Application.Contracts.Ai;
 using Sol.Application.Contracts.Skill;
+using Sol.Application.Features.Agent;
 using Sol.Domain.Ai;
 using Sol.Infrastructure.Options;
 
@@ -43,6 +44,20 @@ public static class SkillEndpoints
         return TypedResults.Ok(new SkillListResponse(
             configuredOptions.Value.SandboxEnabled,
             [.. list.Select(ToResponse)]));
+    }
+
+    private static Results<Ok<BuiltInSkillListResponse>, UnauthorizedHttpResult> ListBuiltIn(
+        HttpContext http)
+    {
+        if (http.GetDeviceId() is null) return TypedResults.Unauthorized();
+        return TypedResults.Ok(new BuiltInSkillListResponse(
+        [
+            .. BuiltInSkillCatalog.All.Select(skill => new BuiltInSkillResponse(
+                skill.Slug,
+                skill.Name,
+                skill.Description,
+                [.. BuiltInSkillCatalog.ListFiles(skill.Slug)])),
+        ]));
     }
 
     private static async Task<Results<Ok<SkillResponse>, NotFound, BadRequest<ErrorResponse>,

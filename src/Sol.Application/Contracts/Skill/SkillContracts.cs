@@ -31,3 +31,12 @@ public sealed record SkillResponse(
     string UpdatedAt);
 
 public sealed record SkillListResponse(bool SandboxEnabled, SkillResponse[] Skills);
+
+/// <summary>A read-only Skill shipped with Sol. No id, no risk metadata — it cannot be uninstalled.</summary>
+public sealed record BuiltInSkillResponse(
+    string Slug,
+    string Name,
+    string Description,
+    string[] Files);
+
+public sealed record BuiltInSkillListResponse(BuiltInSkillResponse[] Skills);

@@ -5,6 +5,7 @@ import * as api from "@/features/skills/api";
 
 interface SkillsState {
   skills: api.Skill[];
+  builtInSkills: api.BuiltInSkill[];
   sandboxEnabled: boolean;
   loading: boolean;
   loaded: boolean;
@@ -17,6 +18,7 @@ interface SkillsState {
 
 export const useSkillsStore = create<SkillsState>((set, get) => ({
   skills: [],
+  builtInSkills: [],
   sandboxEnabled: false,
   loading: false,
   loaded: false,
@@ -30,9 +32,15 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   refresh: async () => {
     set({ loading: true, error: null });
     try {
-      const result = await api.listSkills();
+      // Built-ins are presentation-only metadata; failing to list them must not hide the
+      // user's installed skills.
+      const [result, builtIn] = await Promise.all([
+        api.listSkills(),
+        api.listBuiltInSkills().catch(() => []),
+      ]);
       set({
         skills: result.skills,
+        builtInSkills: builtIn,
         sandboxEnabled: result.sandboxEnabled,
         loading: false,
         loaded: true,
