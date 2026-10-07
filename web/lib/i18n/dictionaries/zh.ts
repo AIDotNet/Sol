@@ -492,7 +492,6 @@ export const zh = {
     start: "开始生成",
     error: {
       "story-required": "请先粘贴剧情文本",
-      "story-too-long": "剧情文本过长，请拆分后分批生成",
       "image-model-required": "请先配置并选择图片模型",
       "video-model-required": "生成视频需要先配置并选择视频模型",
     },

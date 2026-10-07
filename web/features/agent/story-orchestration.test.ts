@@ -3,7 +3,6 @@ import {
   buildStoryPrompt,
   estimateStoryRun,
   MAX_STORY_CHARACTERS,
-  MAX_STORY_LENGTH,
   resolveSecondsPerShot,
   resolveShotCount,
   SHOT_COUNT_RANGE,
@@ -68,11 +67,8 @@ describe("validateStoryOrchestration", () => {
     expect(validateStoryOrchestration(BASE)).toBeNull();
   });
 
-  it("rejects an empty or oversized story", () => {
+  it("rejects an empty story", () => {
     expect(validateStoryOrchestration({ ...BASE, story: "  " })).toBe("story-required");
-    expect(
-      validateStoryOrchestration({ ...BASE, story: "a".repeat(MAX_STORY_LENGTH + 1) }),
-    ).toBe("story-too-long");
   });
 
   it("requires an image model and, when videos are on, a video model", () => {

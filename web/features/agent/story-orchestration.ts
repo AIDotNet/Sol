@@ -21,9 +21,6 @@ import type { Locale } from "@/lib/i18n/config";
  * stack downward — which is also the direction the canvas already reads.
  */
 
-/** Longest novel accepted in one run. Longer inputs should be split by the user for now. */
-export const MAX_STORY_LENGTH = 8000;
-
 /** The story extractor pulls at most this many character cards, leads first. */
 export const MAX_STORY_CHARACTERS = 4;
 
@@ -44,7 +41,7 @@ export const STORY_STYLE_OPTIONS = [
 export type StoryStyle = (typeof STORY_STYLE_OPTIONS)[number] | "none";
 
 export interface StoryOrchestrationOptions {
-  /** The novel text to adapt. Assumed already trimmed and length-checked by the caller. */
+  /** The novel text to adapt. Assumed already trimmed by the caller. */
   story: string;
   /** Target shot count; `null` lets the model decide from the story's beats. */
   shotCount: number | null;
@@ -97,7 +94,6 @@ export function estimateStoryRun(shotCount: number | null, generateVideos: boole
 
 export type StoryValidationError =
   | "story-required"
-  | "story-too-long"
   | "image-model-required"
   | "video-model-required";
 
@@ -105,7 +101,6 @@ export function validateStoryOrchestration(
   options: StoryOrchestrationOptions,
 ): StoryValidationError | null {
   if (!options.story.trim()) return "story-required";
-  if (options.story.length > MAX_STORY_LENGTH) return "story-too-long";
   if (!options.imageProviderId || !options.imageModelId) return "image-model-required";
   if (options.generateVideos && (!options.videoProviderId || !options.videoModelId)) {
     return "video-model-required";

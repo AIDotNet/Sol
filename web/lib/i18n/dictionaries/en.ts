@@ -501,7 +501,6 @@ export const en: Dictionary = {
     start: "Start",
     error: {
       "story-required": "Paste the story text first",
-      "story-too-long": "The story is too long — split it and run in batches",
       "image-model-required": "Configure and pick an image model first",
       "video-model-required": "Configure and pick a video model to generate videos",
     },

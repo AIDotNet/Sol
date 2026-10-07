@@ -26,7 +26,6 @@ import { isAgentRunActive } from "@/features/agent/types";
 import {
   buildStoryPrompt,
   estimateStoryRun,
-  MAX_STORY_LENGTH,
   STORY_DURATION_OPTIONS,
   STORY_SHOT_OPTIONS,
   STORY_STYLE_OPTIONS,
@@ -213,14 +212,10 @@ export function StoryDialog({
           <Textarea
             value={story}
             onChange={(event) => setStory(event.target.value)}
-            maxLength={MAX_STORY_LENGTH}
             placeholder={t("story.storyPlaceholder")}
             aria-label={t("story.storyLabel")}
             className="max-h-64 min-h-28 resize-y"
           />
-          <span className="self-end text-[0.625rem] tabular-nums text-muted-foreground">
-            {story.length}/{MAX_STORY_LENGTH}
-          </span>
         </div>
 
         <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
