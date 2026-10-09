@@ -144,7 +144,7 @@ PATCH  /api/v1/canvas/assets/group           批量归组（{ assetIds, groupId 
 | `gemini` | ✅ `generateContent` | ✅ `generateContent` | — |
 | `openai-images` | — | ✅ `/images/generations`、`/images/edits` | — |
 | `openai-video` | — | — | ✅ `/videos` |
-| `xai-video` | — | — | ✅ 同 OpenAI 形状 |
+| `xai-video` | — | — | ✅ `/videos/generations` + `/videos/{request_id}`（`request_id`/`done`/内联 `video.url`，与 OpenAI 形状不同；Routin 渠道自动改写为 `/xai/v1` 根） |
 | `seedance-video` | — | — | ✅ `/contents/generations/tasks` |
 
 前端在 `web/features/ai/protocol-support.ts` 维护同一份矩阵，驱动「尚未支持」标记。新增协议但客户端未就绪时，把该项标为 `planned`，UI 会自动禁用相关模型。

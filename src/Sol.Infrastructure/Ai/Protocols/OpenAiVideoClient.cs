@@ -9,7 +9,7 @@ using Sol.Domain.Ai;
 namespace Sol.Infrastructure.Ai.Protocols;
 
 /// <summary>
-/// OpenAI-style video generation (Sora, and xAI which follows the same shape).
+/// OpenAI-style video generation (Sora).
 /// </summary>
 /// <remarks>
 /// A much narrower parameter set than Seedance: duration, aspect and resolution only. Sending
@@ -229,27 +229,222 @@ internal sealed class OpenAiVideoClient(
 }
 
 /// <summary>
-/// xAI video generation.
+/// xAI video generation (Grok Imagine), per the xAI Videos API also served by the Routin gateway.
 /// </summary>
 /// <remarks>
-/// Wire-compatible with the OpenAI shape, so it reuses that implementation and only differs by
-/// the protocol it registers under. The node UI additionally caps xAI at 720p.
+/// Deceptively OpenAI-like but a different dialect: creation posts to <c>/videos/generations</c>
+/// and returns <c>request_id</c> rather than <c>id</c>, the poll recognizes
+/// <c>pending / done / failed / expired</c>, and the finished video arrives inline as
+/// <c>video.url</c> instead of behind a <c>/content</c> sub-resource. Parameters are
+/// <c>duration</c> (seconds), <c>aspect_ratio</c> and <c>resolution</c>; the node UI additionally
+/// caps xAI at 720p.
 /// </remarks>
 internal sealed class XaiVideoClient(
     IHttpClientFactory httpClientFactory,
-    ILogger<OpenAiVideoClient> logger) : IVideoGenerationClient
+    ILogger<XaiVideoClient> logger) : IVideoGenerationClient
 {
-    private readonly OpenAiVideoClient _inner = new(httpClientFactory, logger);
+    /// <summary>Documented clip bounds: 15s, or 10s when reference images steer the subject.</summary>
+    private const int MaxDurationSeconds = 15;
+    private const int MaxReferenceDurationSeconds = 10;
+
+    /// <summary>The API takes at most 7 reference images.</summary>
+    private const int MaxReferenceImages = 7;
 
     public ProviderType Protocol => ProviderType.XaiVideo;
 
-    public Task<VideoSubmitResult> SubmitAsync(VideoGenerationRequest request, CancellationToken ct) =>
-        _inner.SubmitAsync(request, ct);
+    public async Task<VideoSubmitResult> SubmitAsync(
+        VideoGenerationRequest request,
+        CancellationToken ct)
+    {
+        var client = httpClientFactory.CreateClient("upstream");
+        var baseUrl = ResolveBaseUrl(request.Provider);
 
-    public Task<VideoPollResult> PollAsync(
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post, $"{baseUrl}/videos/generations")
+        {
+            Content = new StringContent(
+                BuildRequestBody(request).ToJsonString(), Encoding.UTF8, "application/json"),
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", request.ApiKey);
+
+        try
+        {
+            using var response = await client.SendAsync(message, ct);
+            var text = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogInformation(
+                    "xAI video submit failed with {StatusCode}", (int)response.StatusCode);
+                return VideoSubmitResult.Failure(
+                    (int)response.StatusCode, OpenAiImagesClient.ExtractError(text));
+            }
+
+            using var document = JsonDocument.Parse(text);
+            var root = document.RootElement;
+            var id = root.TryGetProperty("request_id", out var requestId)
+                ? requestId.GetString()
+                : root.TryGetProperty("id", out var idElement) ? idElement.GetString() : null;
+
+            return string.IsNullOrEmpty(id)
+                ? VideoSubmitResult.Failure(null, "Upstream returned no request id.")
+                : VideoSubmitResult.Success(id);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException
+            or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            return VideoSubmitResult.Failure(null, exception.Message);
+        }
+    }
+
+    public async Task<VideoPollResult> PollAsync(
         AiProvider provider,
         string apiKey,
         string upstreamJobId,
-        CancellationToken ct) =>
-        _inner.PollAsync(provider, apiKey, upstreamJobId, ct);
+        CancellationToken ct)
+    {
+        var client = httpClientFactory.CreateClient("upstream");
+        var baseUrl = ResolveBaseUrl(provider);
+
+        using var message = new HttpRequestMessage(
+            HttpMethod.Get, $"{baseUrl}/videos/{upstreamJobId}");
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        try
+        {
+            using var response = await client.SendAsync(message, ct);
+            var text = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                // Treated as still-running so a blip does not fail a job that is fine; the
+                // stale-job sweep bounds how long an unresponsive job can linger.
+                return new VideoPollResult(VideoJobState.Running, null, null, null);
+            }
+
+            return ParsePoll(text);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException
+            or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            return new VideoPollResult(VideoJobState.Running, null, null, null);
+        }
+    }
+
+    internal static JsonObject BuildRequestBody(VideoGenerationRequest request)
+    {
+        var body = new JsonObject
+        {
+            ["model"] = request.ModelKey,
+            ["prompt"] = request.Prompt,
+        };
+
+        // image (start frame) and reference_images are mutually exclusive; one connected image is
+        // the common image-to-video case and maps to the start frame.
+        if (request.ReferenceImages.Count == 1)
+        {
+            body["image"] = new JsonObject { ["url"] = ImageUrl(request.ReferenceImages[0]) };
+        }
+        else if (request.ReferenceImages.Count > 1)
+        {
+            var references = new JsonArray();
+            foreach (var image in request.ReferenceImages.Take(MaxReferenceImages))
+            {
+                references.Add((JsonNode)new JsonObject { ["url"] = ImageUrl(image) });
+            }
+
+            body["reference_images"] = references;
+        }
+
+        if (request.DurationSeconds is { } duration)
+        {
+            var max = request.ReferenceImages.Count > 1
+                ? MaxReferenceDurationSeconds
+                : MaxDurationSeconds;
+            body["duration"] = Math.Clamp(duration, 1, max);
+        }
+
+        if (request.Aspect is { } aspect) body["aspect_ratio"] = aspect;
+
+        // 1080p is not offered to xAI in the node UI; dropping it here is the backstop.
+        if (request.Resolution is "480p" or "720p") body["resolution"] = request.Resolution;
+
+        return body;
+    }
+
+    /// <summary>
+    /// Maps a poll response body onto a job state.
+    /// </summary>
+    /// <remarks>
+    /// Terminal on <c>done</c>, <c>failed</c> and <c>expired</c>; anything else stays pending so
+    /// an unknown status cannot fail a job that is merely new.
+    /// </remarks>
+    internal static VideoPollResult ParsePoll(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        var status = root.TryGetProperty("status", out var statusElement)
+            ? statusElement.GetString()
+            : null;
+
+        var progress = root.TryGetProperty("progress", out var progressElement)
+            && progressElement.ValueKind == JsonValueKind.Number
+                ? progressElement.GetDouble() / 100
+                : (double?)null;
+
+        return status switch
+        {
+            // The finished video arrives inline as video.url; there is no content sub-resource.
+            "done" => ReadVideoUrl(root) is { } url
+                ? new VideoPollResult(VideoJobState.Succeeded, 1, url, null)
+                : new VideoPollResult(VideoJobState.Failed, null, null,
+                    "Generation finished but no video URL was returned."),
+            "failed" => new VideoPollResult(
+                VideoJobState.Failed, null, null, ReadError(root) ?? "Generation failed."),
+            "expired" => new VideoPollResult(
+                VideoJobState.Failed, null, null,
+                "The video request expired upstream; submit it again."),
+            _ => new VideoPollResult(VideoJobState.Pending, progress, null, null),
+        };
+    }
+
+    /// <summary>
+    /// Resolves the API root for a provider.
+    /// </summary>
+    /// <remarks>
+    /// The Routin gateway mounts the xAI API under <c>/xai/v1</c> while every other protocol it
+    /// proxies shares the provider's own root, and a provider row carries a single base URL — so
+    /// the xAI root is derived from the origin. Any other host is used verbatim.
+    /// </remarks>
+    internal static string ResolveBaseUrl(AiProvider provider)
+    {
+        var baseUrl = provider.BaseUrl.TrimEnd('/');
+        if (provider.BuiltinId != "routin-ai"
+            || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
+        {
+            return baseUrl;
+        }
+
+        return $"{uri.GetLeftPart(UriPartial.Authority)}/xai/v1";
+    }
+
+    private static string ImageUrl(ReferenceImage image) =>
+        // The API accepts a public URL or an inline base64 data URI; the public asset link wins
+        // when the deployment can publish one, keeping large frames out of the request body.
+        image.Url ?? $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}";
+
+    private static string? ReadVideoUrl(JsonElement root) =>
+        root.TryGetProperty("video", out var video)
+        && video.TryGetProperty("url", out var url)
+        && url.ValueKind == JsonValueKind.String
+            ? url.GetString()
+            : null;
+
+    private static string? ReadError(JsonElement root) =>
+        root.TryGetProperty("error", out var error)
+        && error.TryGetProperty("message", out var message)
+        && message.ValueKind == JsonValueKind.String
+            ? message.GetString()
+            : null;
 }
